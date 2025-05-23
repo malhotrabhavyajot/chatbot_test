@@ -23,7 +23,7 @@ const appendToChatHistory = (role, message) => {
 };
 
 
-define(["qlik", "text!./Mark11.html"], function (qlik, html) {
+define(["qlik", "text!./index.html"], function (qlik, html) {
     return {
         support: {
             snapshot: true,
