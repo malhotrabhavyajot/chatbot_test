@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
+import ChatbotIcon from '../assets/chatbot-toggler.png';
+import ZSIcon from '../assets/ZS_Associates.png';
 
 const ChatBot = () => {
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem('chatMessages');
     return saved ? JSON.parse(saved) : [];
   });
-  const suggestions = ["What is Field Assistant?", "Show top 5 territories", "Show top 10 HCPs"];
+  const suggestions = ["What is Field Assistant?", "Show top 5 territories", "Show top 10 HCPs", "Show top 10 Accounts"];
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
@@ -16,7 +18,7 @@ const ChatBot = () => {
 
   useEffect(() => {
     if (isOpen) {
-      const greeting = `Hello 👋! I'm your Field Assistant. How can I help you today?`;
+      const greeting = `Hello 👋! How may I assist you?`;
       setMessages([{ role: 'assistant', text: greeting }]);
     }
   }, [isOpen]);
@@ -74,20 +76,20 @@ const ChatBot = () => {
   return (
     <>
       <div style={{ background: 'linear-gradient(to bottom right, #f7faff, #e2ecf4)', minHeight: '100vh' }}>
-        <button
-          className="chatbot-toggler modern-toggler"
-          onClick={() => setIsOpen(!isOpen)}
-          aria-label="Toggle chatbot"
-          style={{ position: 'fixed', right: '20px', bottom: '20px', zIndex: 10000 }}>
-          {isOpen ? '✖' : '🤖'}
-        </button>
+            <button
+            className="chatbot-toggler modern-toggler"
+            onClick={() => setIsOpen(!isOpen)}
+            aria-label="Toggle chatbot"
+            style={{ position: 'fixed', right: '20px', bottom: '20px', zIndex: 10000 }}>
+              {isOpen ? '✖' : <img src={ChatbotIcon} alt="Chatbot" style={{ width: 48, height: 48}} />}
+            </button>
 
         {isOpen && (
           <div
             className={`chatbot modern-chatbot ${darkMode ? 'dark-mode' : ''}`}
             style={{ position: 'fixed', right: '20px', bottom: '80px', width: isExpanded ? '95vw' : '90vw', height: isExpanded ? '80vh' : '70vh', maxWidth: isExpanded ? '600px' : '400px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', backgroundColor: darkMode ? '#1e1e1e' : '#ffffff', display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'all 0.3s ease', zIndex: 9999 }}>
 
-            <header style={{ backgroundColor: darkMode ? '#222' : '#fff', color: darkMode ? '#fff' : '#000', padding: '16px 20px', fontSize: '16px', fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee' }}>
+            <header style={{ backgroundColor: darkMode ? '#222' : '#fff', color: darkMode ? '#fff' : '#000', padding: '14px 16px', fontSize: '22px', fontWeight: '600', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #eee' }}>
               <span style={{ fontWeight: 600 }}>ORION <span style={{ color: '#6b38fb' }}>Field Assistant</span></span>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button onClick={toggleTheme} title="Toggle theme" style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
@@ -164,8 +166,8 @@ const ChatBot = () => {
               </button>
             </div>
 
-            <footer className="chatbot-footer" style={{ textAlign: 'center', fontSize: '13px', padding: '8px 0', color: '#777', background: '#f7f8fc', fontWeight: 500 }}>
-              Powered by ZS Associates
+            <footer className="chatbot-footer">
+              Powered by <img src={ZSIcon} alt="ZS Associates"/>
             </footer>
 
           </div>

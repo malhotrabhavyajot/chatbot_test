@@ -285,13 +285,28 @@ button:hover { background-color: #f0f0ff; }
   justify-content: flex-start;
 }
 
-
 header {
   background-color: #f5f7ff !important;
 }
 
 .chatbot-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 0 8px 0;
+  font-size: 14px;
+  color: #777;
+  background: #f7f8fc;
+  font-weight: 500;
+  min-height: 38px;
   background-color: #f5f7ff !important;
   color: #333 !important;
   border-top: 1px solid #e0e0e0;
+}
+.chatbot-footer img {
+  height: 26px;
+  width: auto;
+  margin-top: -1px;
+  vertical-align: middle;
 }
