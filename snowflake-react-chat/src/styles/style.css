@@ -218,7 +218,7 @@ body {
   font-weight: 500;
   transition: all 0.19s;
   cursor: pointer;
-  height: 38px;
+  height: 46x;
 }
 .send-button:hover {
   background-color: #7c3aed;
@@ -378,3 +378,22 @@ body {
   transform: scale(1.14);
 }
 
+.snowflake-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 2px 0;
+  background: #f7f4fd;
+  font-size: 14px;
+  font-family: 'Poppins', monospace;
+}
+.snowflake-table th, .snowflake-table td {
+  border: 1px solid #dad6f5;
+  padding: 5px 12px;
+}
+.snowflake-table th {
+  background: #ede7fa;
+  color: #5233c0;
+}
+.snowflake-table tr:nth-child(even) {
+  background: #f4f2fc;
+}

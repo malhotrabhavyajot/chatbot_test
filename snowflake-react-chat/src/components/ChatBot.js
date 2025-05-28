@@ -3,6 +3,72 @@ import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
 import ZSIcon from '../assets/ZS_Associates.png';
 
+// FORMATTER: Handles Snowflake REST API responses as table or text
+function formatSnowflakeResponse(responseText) {
+  try {
+    const json = JSON.parse(responseText);
+
+    // Support columns in resultSetMetaData.rowType, rowType, rowtype, or columns
+    const columns =
+      (json.resultSetMetaData && json.resultSetMetaData.rowType && json.resultSetMetaData.rowType.map(col => col.name)) ||
+      (json.rowType && json.rowType.map(col => col.name)) ||
+      (json.rowtype && json.rowtype.map(col => col.name)) ||
+      (json.columns && json.columns.map(col => col.name));
+
+    const data = json.data;
+
+    // 1. If columns are present (even with empty data), show a markdown table
+    if (Array.isArray(columns) && columns.length > 0) {
+      let table = "| " + columns.join(" | ") + " |\n";
+      table += "| " + columns.map(() => "---").join(" | ") + " |\n";
+      if (Array.isArray(data) && data.length > 0) {
+        table += data.map(row =>
+          "| " + row.map(cell => (cell === null ? "" : String(cell))).join(" | ") + " |"
+        ).join("\n");
+      } else {
+        table += "| *(no results)* |\n";
+      }
+      return table;
+    }
+
+    // 2. If error present
+    if (json.error) return "❌ Error: " + json.error;
+
+    // 3. If code/message is present and not "executed successfully", show error
+    if (
+      json.code &&
+      json.code !== "000000" &&
+      (!json.message || !json.message.toLowerCase().includes("executed successfully"))
+    ) {
+      return `❌ Error: ${json.code} - ${json.message}`;
+    }
+
+    // 4. Just show message
+    if (json.message) return json.message;
+
+    return "No data found.";
+  } catch {
+    return responseText || "No response from Snowflake.";
+  }
+}
+
+// Parses markdown tables in string (returns { headers, rows } or null)
+function parseMarkdownTable(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return null;
+  if (!lines[0].trim().startsWith('|') || !lines[1].includes('---')) return null;
+
+  const headers = lines[0].split('|').map(s => s.trim()).filter(Boolean);
+  const rows = lines.slice(2)
+    .map(line => line.split('|').map(cell => cell.trim()).filter(Boolean))
+    .filter(row => row.length === headers.length);
+  // Must have at least one header and at least one data row
+  if (headers.length === 0 || rows.length === 0) return null;
+  // Ignore fake no-results row (optional)
+  if (rows.length === 1 && rows[0][0] === '*(no results)*') return { headers, rows: [] };
+  return { headers, rows };
+}
+
 const ChatBot = () => {
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem('chatMessages');
@@ -10,10 +76,10 @@ const ChatBot = () => {
   });
   const [feedback, setFeedback] = useState({});
   const suggestions = [
-    "What is Field Assistant?",
-    "Show top 5 territories",
-    "Show top 10 HCPs",
-    "Show top 10 Accounts"
+    "SELECT CURRENT_TIMESTAMP;",
+    "SELECT DISTINCT CLAIM_TYPE FROM CLAIMS;",
+    "SELECT COUNT(*) FROM CLAIMS;",
+    "SHOW TABLES;"
   ];
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -36,20 +102,21 @@ const ChatBot = () => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  // Universal handler for sending user messages (input or suggestion)
+  // Send user message to backend and update chat
   const handleSendMessage = async (userMessage) => {
+    if (!userMessage.trim()) return;
     const newMessages = [...messages, { role: 'user', text: userMessage }];
     setMessages(newMessages);
     localStorage.setItem('chatMessages', JSON.stringify(newMessages));
     setInput('');
 
     // Show loading message
-    const pendingList = [...newMessages, { role: 'assistant', text: '⏳ Working on your request...' }];
+    const pendingList = [...newMessages, { role: 'assistant', text: '⏳ Querying Snowflake...' }];
     setMessages(pendingList);
     localStorage.setItem('chatMessages', JSON.stringify(pendingList));
 
-    // Send to local proxy!
-    let responseText;
+    // Send to Node proxy backend
+    let responseText = '';
     try {
       const response = await fetch('http://localhost:4000/api/snowflake', {
         method: 'POST',
@@ -57,6 +124,10 @@ const ChatBot = () => {
         body: JSON.stringify({ statement: userMessage })
       });
       responseText = await response.text();
+      console.log("Frontend: RAW SNOWFLAKE RESPONSE:", responseText); // Debug log
+
+      // Pretty print the response
+      responseText = formatSnowflakeResponse(responseText);
     } catch (err) {
       responseText = "⚠️ Unable to connect to backend.";
     }
@@ -72,7 +143,6 @@ const ChatBot = () => {
     setFeedback(prev => ({ ...prev, [idx]: type }));
     setToast('Thanks for your feedback!');
     setTimeout(() => setToast(''), 1100);
-    // Optionally: send feedback to analytics here
   };
 
   const toggleTheme = () => setDarkMode(prev => !prev);
@@ -106,7 +176,6 @@ const ChatBot = () => {
               transition: 'all 0.3s ease',
               zIndex: 9999
             }}>
-
             <header className="chatbot-header">
               <span style={{ fontWeight: 600 }}>
                 ORION <span style={{ color: '#6b38fb' }}>Field Assistant</span>
@@ -179,7 +248,6 @@ const ChatBot = () => {
                 </button>
               </div>
             </header>
-
             <ul className="chatbox" ref={chatRef}>
               {messages.map((msg, idx) => (
                 <li
@@ -203,9 +271,34 @@ const ChatBot = () => {
                       position: 'relative'
                     }}
                   >
-                    {msg.text}
+                    {(() => {
+                      const parsedTable = parseMarkdownTable(msg.text);
+                      if (parsedTable) {
+                        return (
+                          <table className="snowflake-table">
+                            <thead>
+                              <tr>
+                                {parsedTable.headers.map((h, i) => <th key={i}>{h}</th>)}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {parsedTable.rows.length === 0 ? (
+                                <tr><td colSpan={parsedTable.headers.length} style={{ textAlign: 'center', color: '#888' }}>(no results)</td></tr>
+                              ) : parsedTable.rows.map((row, ridx) => (
+                                <tr key={ridx}>
+                                  {row.map((cell, cidx) => <td key={cidx}>{cell}</td>)}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        );
+                      }
+                      // Otherwise, show plain text (with newlines)
+                      return msg.text.split('\n').map((line, i) => (
+                        <div key={i}>{line}</div>
+                      ));
+                    })()}
                   </div>
-                  {/* Feedback buttons only for assistant responses */}
                   {msg.role === 'assistant' && (
                     <div className="feedback-row">
                       {feedback[idx] === undefined && (
@@ -233,7 +326,6 @@ const ChatBot = () => {
                 </li>
               ))}
             </ul>
-
             <div className="suggestions">
               {suggestions.map((s, i) => (
                 <button
@@ -245,7 +337,6 @@ const ChatBot = () => {
                 </button>
               ))}
             </div>
-
             <div className="chat-input">
               <textarea
                 ref={inputRef}
@@ -263,11 +354,9 @@ const ChatBot = () => {
                 Send
               </button>
             </div>
-
             <footer className="chatbot-footer">
               Powered by <img src={ZSIcon} alt="ZS Associates" />
             </footer>
-
             {toast && <div className="toast">{toast}</div>}
           </div>
         )}
