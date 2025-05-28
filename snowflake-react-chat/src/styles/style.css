@@ -11,32 +11,46 @@ body {
   background: linear-gradient(to right, #e3f2fd, #ffffff);
 }
 
-.chatbot {
+/* MODERN CHATBOT CONTAINER: NO INLINE SIZING NEEDED! */
+.chatbot.modern-chatbot {
+  position: fixed;
+  right: 20px;
+  bottom: 80px;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   display: flex;
   flex-direction: column;
-  position: fixed;
-  right: 35px;
-  bottom: 90px;
-  width: 420px;
-  height: 550px;
-  background: #fff;
-  border-radius: 15px;
-  box-shadow: 0 0 128px 0 rgba(0, 0, 0, 0.1),
-              0 32px 64px -48px rgba(0, 0, 0, 0.5);
-  transform-origin: bottom right;
-  opacity: 1;
-  pointer-events: auto;
-  transform: scale(1);
-  z-index: 9998;
   overflow: hidden;
+  transition: all 0.3s ease;
+  z-index: 9999;
+  background-color: #fff;
+}
+
+/* Collapsed (default) state */
+.chatbot.modern-chatbot.collapsed {
+  width: 480px;
+  height: 650px;
+  max-width: 480px;
+}
+
+/* Expanded state */
+.chatbot.modern-chatbot.expanded {
+  width: 95vw;
+  height: 80vh;
+  max-width: 1100px;
+}
+
+/* Dark mode background */
+.chatbot.modern-chatbot.dark-mode {
+  background-color: #1e1e1e;
 }
 
 .chatbot-header {
-  background:#f7f8fc!important;
+  background: #f7f8fc !important;
   color: #23234a;
   font-weight: 600;
   font-size: 20px;
-  padding: 16px 20px;
+  padding: 10px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -389,6 +403,7 @@ body {
 .snowflake-table th, .snowflake-table td {
   border: 1px solid #dad6f5;
   padding: 5px 12px;
+  vertical-align: top;
 }
 .snowflake-table th {
   background: #ede7fa;

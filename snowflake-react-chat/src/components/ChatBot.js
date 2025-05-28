@@ -3,38 +3,33 @@ import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
 import ZSIcon from '../assets/ZS_Associates.png';
 
-// FORMATTER: Handles Snowflake REST API responses as table or text
+// Hardcoded answers (business questions)
+const HARDCODED_ANSWERS = {
+  "where can i find my cpc": "The CPC metric can be found on your CPC dashboard sheet in the app.",
+  "where can i learn more about reach and frequency": "Reach and Frequency can be found in the dedicated dashboard section.",
+  "where can i find reach": "You can find Reach on the Reach Analysis dashboard sheet.",
+  "can you take me to sales trx page": "You can view the Sales TRx on the Sales TRx dashboard sheet.",
+  "which prescriber qualifies as a new writer": "A prescriber qualifies as a new writer if they have a script volume greater than 0 during your selected timeframe.",
+  "what is breadth and depth": "Breadth: Number of HCPs who wrote the product at least once in the measured period. Depth: Average scripts written by call plan prescribers.",
+  "where can i find sales trend": "The Sales Trend is displayed on the Sales Trend dashboard sheet."
+};
+
+const HARDCODED_SUGGESTIONS = [
+  "Where can I find my CPC",
+  "Where can I learn more about reach and frequency",
+  "Where can I find Reach",
+  "Can you take me to sales trx page",
+  "Which prescriber qualifies as a new writer",
+  "What is breadth and depth",
+  "Where can i find sales trend"
+];
+
+// Helper: Format response for plain text fallback (errors, etc)
 function formatSnowflakeResponse(responseText) {
   try {
     const json = JSON.parse(responseText);
 
-    // Support columns in resultSetMetaData.rowType, rowType, rowtype, or columns
-    const columns =
-      (json.resultSetMetaData && json.resultSetMetaData.rowType && json.resultSetMetaData.rowType.map(col => col.name)) ||
-      (json.rowType && json.rowType.map(col => col.name)) ||
-      (json.rowtype && json.rowtype.map(col => col.name)) ||
-      (json.columns && json.columns.map(col => col.name));
-
-    const data = json.data;
-
-    // 1. If columns are present (even with empty data), show a markdown table
-    if (Array.isArray(columns) && columns.length > 0) {
-      let table = "| " + columns.join(" | ") + " |\n";
-      table += "| " + columns.map(() => "---").join(" | ") + " |\n";
-      if (Array.isArray(data) && data.length > 0) {
-        table += data.map(row =>
-          "| " + row.map(cell => (cell === null ? "" : String(cell))).join(" | ") + " |"
-        ).join("\n");
-      } else {
-        table += "| *(no results)* |\n";
-      }
-      return table;
-    }
-
-    // 2. If error present
     if (json.error) return "❌ Error: " + json.error;
-
-    // 3. If code/message is present and not "executed successfully", show error
     if (
       json.code &&
       json.code !== "000000" &&
@@ -42,45 +37,27 @@ function formatSnowflakeResponse(responseText) {
     ) {
       return `❌ Error: ${json.code} - ${json.message}`;
     }
-
-    // 4. Just show message
     if (json.message) return json.message;
-
     return "No data found.";
   } catch {
     return responseText || "No response from Snowflake.";
   }
 }
 
-// Parses markdown tables in string (returns { headers, rows } or null)
-function parseMarkdownTable(text) {
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) return null;
-  if (!lines[0].trim().startsWith('|') || !lines[1].includes('---')) return null;
-
-  const headers = lines[0].split('|').map(s => s.trim()).filter(Boolean);
-  const rows = lines.slice(2)
-    .map(line => line.split('|').map(cell => cell.trim()).filter(Boolean))
-    .filter(row => row.length === headers.length);
-  // Must have at least one header and at least one data row
-  if (headers.length === 0 || rows.length === 0) return null;
-  // Ignore fake no-results row (optional)
-  if (rows.length === 1 && rows[0][0] === '*(no results)*') return { headers, rows: [] };
-  return { headers, rows };
-}
-
 const ChatBot = () => {
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem('chatMessages');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) return JSON.parse(saved);
+    return [{ role: 'assistant', text: 'Hello 👋! How may I assist you?' }];
   });
+
   const [feedback, setFeedback] = useState({});
-  const suggestions = [
-    "SELECT CURRENT_TIMESTAMP;",
-    "SELECT DISTINCT CLAIM_TYPE FROM CLAIMS;",
-    "SELECT COUNT(*) FROM CLAIMS;",
-    "SHOW TABLES;"
-  ];
+  // Suggestion index for rotating hardcoded suggestions
+  const [suggestionIndex, setSuggestionIndex] = useState(() => {
+    const stored = localStorage.getItem('suggestionIndex');
+    return stored ? parseInt(stored, 10) : 0;
+  });
+
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
@@ -89,14 +66,10 @@ const ChatBot = () => {
   const chatRef = useRef();
   const inputRef = useRef();
 
-  useEffect(() => {
-    if (isOpen) {
-      const greeting = `Hello 👋! How may I assist you?`;
-      setMessages([{ role: 'assistant', text: greeting }]);
-      setFeedback({});
-      localStorage.removeItem('chatMessages');
-    }
-  }, [isOpen]);
+  // Only show 4 rotating suggestions at a time
+  const visibleSuggestions = Array(4)
+    .fill(0)
+    .map((_, i) => HARDCODED_SUGGESTIONS[(suggestionIndex + i) % HARDCODED_SUGGESTIONS.length]);
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
@@ -110,32 +83,44 @@ const ChatBot = () => {
     localStorage.setItem('chatMessages', JSON.stringify(newMessages));
     setInput('');
 
+    // HARDCODED ANSWER CHECK
+    const cleaned = userMessage.trim().toLowerCase();
+    const matchedKey = Object.keys(HARDCODED_ANSWERS).find(
+      k => cleaned.includes(k)
+    );
+    if (matchedKey) {
+      const hardcodedAnswer = HARDCODED_ANSWERS[matchedKey];
+      const updatedMessages = [...newMessages, { role: 'assistant', text: hardcodedAnswer }];
+      setMessages(updatedMessages);
+      localStorage.setItem('chatMessages', JSON.stringify(updatedMessages));
+      return;
+    }
+
     // Show loading message
     const pendingList = [...newMessages, { role: 'assistant', text: '⏳ Querying Snowflake...' }];
     setMessages(pendingList);
     localStorage.setItem('chatMessages', JSON.stringify(pendingList));
 
     // Send to Node proxy backend
-    let responseText = '';
     try {
       const response = await fetch('http://localhost:4000/api/snowflake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statement: userMessage })
       });
-      responseText = await response.text();
-      console.log("Frontend: RAW SNOWFLAKE RESPONSE:", responseText); // Debug log
+      const responseText = await response.text();
 
-      // Pretty print the response
-      responseText = formatSnowflakeResponse(responseText);
+      // Save BOTH the pretty text and raw JSON in the message
+      const formatted = formatSnowflakeResponse(responseText);
+      const updatedMessages = [...newMessages, { role: 'assistant', text: formatted, rawJson: responseText }];
+      setMessages(updatedMessages);
+      localStorage.setItem('chatMessages', JSON.stringify(updatedMessages));
     } catch (err) {
-      responseText = "⚠️ Unable to connect to backend.";
+      const formatted = "⚠️ Unable to connect to backend.";
+      const updatedMessages = [...newMessages, { role: 'assistant', text: formatted }];
+      setMessages(updatedMessages);
+      localStorage.setItem('chatMessages', JSON.stringify(updatedMessages));
     }
-
-    // Replace loading with real response
-    const updatedMessages = [...newMessages, { role: 'assistant', text: responseText }];
-    setMessages(updatedMessages);
-    localStorage.setItem('chatMessages', JSON.stringify(updatedMessages));
   };
 
   // Feedback handlers
@@ -146,6 +131,72 @@ const ChatBot = () => {
   };
 
   const toggleTheme = () => setDarkMode(prev => !prev);
+
+  // Core chat bubble renderer
+  const renderChatBubbleContent = (msg) => {
+    // Try to render as HTML table if possible (from rawJson)
+    if (msg.rawJson) {
+      try {
+        const json = JSON.parse(msg.rawJson);
+        const columns =
+          (json.resultSetMetaData && json.resultSetMetaData.rowType && json.resultSetMetaData.rowType.map(col => col.name)) ||
+          (json.rowType && json.rowType.map(col => col.name)) ||
+          (json.rowtype && json.rowtype.map(col => col.name)) ||
+          (json.columns && json.columns.map(col => col.name));
+        const data = json.data;
+        if (Array.isArray(columns) && columns.length > 0 && Array.isArray(data)) {
+          return (
+            <table className="snowflake-table">
+              <thead>
+                <tr>
+                  {columns.map((h, i) => <th key={i}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {data.length === 0 ? (
+                  <tr><td colSpan={columns.length} style={{ textAlign: 'center', color: '#888' }}>(no results)</td></tr>
+                ) : data.map((row, ridx) => (
+                  <tr key={ridx}>
+                    {row.map((cell, cidx) => (
+                      <td key={cidx} style={{
+                        whiteSpace: 'pre-wrap',
+                        fontFamily: typeof cell === "string" && cell.trim().startsWith('[') ? "monospace" : undefined
+                      }}>
+                        {(() => {
+                          try {
+                            if (typeof cell === "string" && (cell.trim().startsWith('[') || cell.trim().startsWith('{'))) {
+                              const parsed = JSON.parse(cell);
+                              if (Array.isArray(parsed)) {
+                                return (
+                                  <ul style={{ paddingLeft: '18px', margin: 0 }}>
+                                    {parsed.map((item, idx) => <li key={idx}>{item}</li>)}
+                                  </ul>
+                                );
+                              }
+                              if (typeof parsed === 'object') {
+                                return <pre>{JSON.stringify(parsed, null, 2)}</pre>;
+                              }
+                            }
+                            return cell;
+                          } catch {
+                            return cell;
+                          }
+                        })()}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          );
+        }
+      } catch {}
+    }
+    // Fallback: plain text (with newlines)
+    return msg.text.split('\n').map((line, i) => (
+      <div key={i}>{line}</div>
+    ));
+  };
 
   return (
     <>
@@ -159,23 +210,12 @@ const ChatBot = () => {
         </button>
         {isOpen && (
           <div
-            className={`chatbot modern-chatbot${darkMode ? ' dark-mode' : ''}`}
-            style={{
-              position: 'fixed',
-              right: '20px',
-              bottom: '80px',
-              width: isExpanded ? '95vw' : '90vw',
-              height: isExpanded ? '80vh' : '70vh',
-              maxWidth: isExpanded ? '600px' : '400px',
-              borderRadius: '16px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              backgroundColor: darkMode ? '#1e1e1e' : '#ffffff',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              transition: 'all 0.3s ease',
-              zIndex: 9999
-            }}>
+            className={
+              `chatbot modern-chatbot` +
+              (darkMode ? ' dark-mode' : '') +
+              (isExpanded ? ' expanded' : ' collapsed')
+            }
+          >
             <header className="chatbot-header">
               <span style={{ fontWeight: 600 }}>
                 ORION <span style={{ color: '#6b38fb' }}>Field Assistant</span>
@@ -211,7 +251,11 @@ const ChatBot = () => {
                 {/* Refresh */}
                 <button
                   onClick={() => {
-                    setMessages([]);
+                    // Rotate suggestions
+                    const newIndex = (suggestionIndex + 4) % HARDCODED_SUGGESTIONS.length;
+                    setSuggestionIndex(newIndex);
+                    localStorage.setItem('suggestionIndex', newIndex.toString());
+                    setMessages([{ role: 'assistant', text: 'Hello 👋! How may I assist you?' }]);
                     localStorage.removeItem('chatMessages');
                     setFeedback({});
                   }}
@@ -271,33 +315,7 @@ const ChatBot = () => {
                       position: 'relative'
                     }}
                   >
-                    {(() => {
-                      const parsedTable = parseMarkdownTable(msg.text);
-                      if (parsedTable) {
-                        return (
-                          <table className="snowflake-table">
-                            <thead>
-                              <tr>
-                                {parsedTable.headers.map((h, i) => <th key={i}>{h}</th>)}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {parsedTable.rows.length === 0 ? (
-                                <tr><td colSpan={parsedTable.headers.length} style={{ textAlign: 'center', color: '#888' }}>(no results)</td></tr>
-                              ) : parsedTable.rows.map((row, ridx) => (
-                                <tr key={ridx}>
-                                  {row.map((cell, cidx) => <td key={cidx}>{cell}</td>)}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        );
-                      }
-                      // Otherwise, show plain text (with newlines)
-                      return msg.text.split('\n').map((line, i) => (
-                        <div key={i}>{line}</div>
-                      ));
-                    })()}
+                    {renderChatBubbleContent(msg)}
                   </div>
                   {msg.role === 'assistant' && (
                     <div className="feedback-row">
@@ -327,7 +345,7 @@ const ChatBot = () => {
               ))}
             </ul>
             <div className="suggestions">
-              {suggestions.map((s, i) => (
+              {visibleSuggestions.map((s, i) => (
                 <button
                   key={i}
                   onClick={() => handleSendMessage(s)}
@@ -344,11 +362,7 @@ const ChatBot = () => {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage(input)}
-                rows={1}
-                onInput={(e) => {
-                  e.target.style.height = 'auto';
-                  e.target.style.height = `${e.target.scrollHeight}px`;
-                }}
+                rows={2}
               ></textarea>
               <button onClick={() => handleSendMessage(input)} title="Send message" className="send-button">
                 Send
