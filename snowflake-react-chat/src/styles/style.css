@@ -29,7 +29,7 @@ body {
 /* Collapsed (default) state */
 .chatbot.modern-chatbot.collapsed {
   width: 480px;
-  height: 650px;
+  height: 800px;
   max-width: 480px;
 }
 
