@@ -5,23 +5,25 @@ import ZSIcon from '../assets/ZS_Associates.png';
 
 // Hardcoded answers (business questions)
 const HARDCODED_ANSWERS = {
-  "where can i find my cpc": "The CPC metric can be found on your CPC dashboard sheet in the app.",
-  "where can i learn more about reach and frequency": "Reach and Frequency can be found in the dedicated dashboard section.",
-  "where can i find reach": "You can find Reach on the Reach Analysis dashboard sheet.",
-  "can you take me to sales trx page": "You can view the Sales TRx on the Sales TRx dashboard sheet.",
-  "which prescriber qualifies as a new writer": "A prescriber qualifies as a new writer if they have a script volume greater than 0 during your selected timeframe.",
-  "what is breadth and depth": "Breadth: Number of HCPs who wrote the product at least once in the measured period. Depth: Average scripts written by call plan prescribers.",
-  "where can i find sales trend": "The Sales Trend is displayed on the Sales Trend dashboard sheet."
+"where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
+"what is formulary status?": "Formulary Status is the 'MMIT Pharmacy field which shows Preferred/Covered combined with PA/ST Restrictions.",
+"what are the number of current monthly suggestion kpi?": "It is the 'Count of monthly suggestions (Call and RTE) for a prescriber.",
+"which dossier gives a detailed analysis about the payors?": "You can find detailed analysis about Payor data in the Payor Highlights dossier.",
+"where can i find explanations about different kpis?": "Explanations and Calculation of each and every KPI can be found in the Glossary dossier.",
+"what is mkt % lis?": "Mkt % LIS in the Percentage of claims where claim type is 'PAID' and channel is 'Medicare' and 'Medicare D', and OPC = $0 - $12 and LIS patient flag = LIS-DE , LIS LTC, LIS-NON-DE, LIS-UNKNOWN for Rolling 3M.",
+"which universes do we show in accounts calculation?": "We show three universes Veeva Aligned, Call Plan/DMCP and a combined Veeva Aligned + Call Plan/DMCP universes.",
+"where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier."
 };
 
 const HARDCODED_SUGGESTIONS = [
-  "Where can I find my CPC",
-  "Where can I learn more about reach and frequency",
-  "Where can I find Reach",
-  "Can you take me to sales trx page",
-  "Which prescriber qualifies as a new writer",
-  "What is breadth and depth",
-  "Where can i find sales trend"
+"Where can I find top 10 Gainer Prescriber over time?",
+"What is Formulary Status?",
+"What are the Number of Current Monthly suggestion KPI?",
+"Which dossier gives a detailed analysis about the Payors?",
+"Where can I find explanations about different KPIS?",
+"What is Mkt % LIS?",
+"Which universes do we show in Accounts calculation?",
+"Where can I find TRX Sales trends overtime?"
 ];
 
 // Helper: Format response for plain text fallback (errors, etc)
