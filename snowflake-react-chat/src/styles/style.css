@@ -11,7 +11,17 @@ body {
   background: linear-gradient(to right, #e3f2fd, #ffffff);
 }
 
-/* MODERN CHATBOT CONTAINER: NO INLINE SIZING NEEDED! */
+/* Smooth transitions for color and background changes */
+.chatbot.modern-chatbot,
+.chat-bubble,
+.chatbot-header,
+.chatbot-footer,
+.chat-input,
+.suggestion-button {
+  transition: background 0.25s, color 0.25s, border 0.25s;
+}
+
+/* MODERN CHATBOT CONTAINER */
 .chatbot.modern-chatbot {
   position: fixed;
   right: 20px;
@@ -26,14 +36,12 @@ body {
   background-color: #fff;
 }
 
-/* Collapsed (default) state */
 .chatbot.modern-chatbot.collapsed {
   width: 480px;
   height: 800px;
   max-width: 480px;
 }
 
-/* Expanded state */
 .chatbot.modern-chatbot.expanded {
   width: 95vw;
   height: 80vh;
@@ -45,6 +53,7 @@ body {
   background-color: #1e1e1e;
 }
 
+/* Chatbot Header */
 .chatbot-header {
   background: #f7f8fc !important;
   color: #23234a;
@@ -123,7 +132,6 @@ body {
   max-width: 80%;
   white-space: pre-wrap;
   word-break: break-word;
-  transition: box-shadow 0.18s;
   animation: fadeIn 0.19s cubic-bezier(.36,1.7,.72,.97);
 }
 
@@ -155,7 +163,6 @@ body {
   font-size: 12px;
   cursor: pointer;
   color: #7c3aed;
-  transition: background 0.13s, color 0.13s, border 0.13s;
   outline: none;
 }
 .feedback-btn.selected,
@@ -187,7 +194,6 @@ body {
   padding: 8px 14px;
   font-size: 14px;
   font-weight: 500;
-  transition: all 0.3s;
 }
 .suggestion-button:hover {
   background-color: #7c3aed;
@@ -230,7 +236,6 @@ body {
   padding: 7px 18px;
   font-size: 14px;
   font-weight: 500;
-  transition: all 0.19s;
   cursor: pointer;
   height: 46x;
 }
@@ -360,7 +365,24 @@ body {
   color: #fff;
 }
 
-/* Mobile responsiveness (optional improvements) */
+/* Tablet/iPad responsiveness (width: 600px - 1024px) */
+@media (max-width: 1024px) and (min-width: 601px) {
+  .chatbot.modern-chatbot.collapsed,
+  .chatbot.modern-chatbot.expanded {
+    width: 90vw !important;
+    height: 75vh !important;
+    max-width: 96vw !important;
+    min-width: 320px;
+    right: 2vw !important;
+    bottom: 3vw !important;
+    border-radius: 14px !important;
+  }
+  .chatbox {
+    padding: 10px !important;
+  }
+}
+
+/* Mobile responsiveness */
 @media (max-width: 600px) {
   .chatbot {
     width: 98vw !important;
