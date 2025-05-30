@@ -296,7 +296,7 @@ const ChatBot = () => {
           >
             <header className="chatbot-header">
               <span style={{ fontWeight: 600 }}>
-                ORION <span style={{ color: '#6b38fb' }}>Field Assistant</span>
+                Field Insights<span style={{ color: '#6b38fb' }}> Assistant</span>
               </span>
               <div className="header-actions">
                 {/* Theme toggle */}
