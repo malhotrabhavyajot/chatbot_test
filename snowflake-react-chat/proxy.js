@@ -11,8 +11,8 @@ const SNOWFLAKE_USER = "MALHOTRABHAVYAJOT"; // ALL CAPS username
 const SNOWFLAKE_URL = 'https://WUQZVQT-DKC22677.snowflakecomputing.com/api/v2/statements';
 const SNOWFLAKE_ROLE = 'ACCOUNTADMIN';
 const SNOWFLAKE_WAREHOUSE = 'INSURANCEWAREHOUSE';
-const SNOWFLAKE_DATABASE = 'INSURANCEDB';
-const SNOWFLAKE_SCHEMA = 'DATA';
+const SNOWFLAKE_DATABASE = 'CHATBOT_DEMO';
+const SNOWFLAKE_SCHEMA = 'CHATBOT_METADATA';
 const PRIVATE_KEY_PATH = 'rsa_key.p8'; // path to your ENCRYPTED private key
 const PRIVATE_KEY_PASSPHRASE = 'CeDzue48qiqbzIu'; // your passphrase
 

@@ -3,46 +3,99 @@ import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
 import ZSIcon from '../assets/ZS_Associates.png';
 
-// Hardcoded answers (business questions)
+// Hardcoded answers (business questions) - as per your logic
 const HARDCODED_ANSWERS = {
-"where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
-"what is formulary status?": "Formulary Status is the 'MMIT Pharmacy field which shows Preferred/Covered combined with PA/ST Restrictions.",
-"what are the number of current monthly suggestion kpi?": "It is the 'Count of monthly suggestions (Call and RTE) for a prescriber.",
-"which dossier gives a detailed analysis about the payors?": "You can find detailed analysis about Payor data in the Payor Highlights dossier.",
-"where can i find explanations about different kpis?": "Explanations and Calculation of each and every KPI can be found in the Glossary dossier.",
-"what is mkt % lis?": "Mkt % LIS in the Percentage of claims where claim type is 'PAID' and channel is 'Medicare' and 'Medicare D', and OPC = $0 - $12 and LIS patient flag = LIS-DE , LIS LTC, LIS-NON-DE, LIS-UNKNOWN for Rolling 3M.",
-"which universes do we show in accounts calculation?": "We show three universes Veeva Aligned, Call Plan/DMCP and a combined Veeva Aligned + Call Plan/DMCP universes.",
-"where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier."
+  "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
+  "what is formulary status?": "Formulary Status is the 'MMIT Pharmacy field which shows Preferred/Covered combined with PA/ST Restrictions.",
+  "what are the number of current monthly suggestion kpi?": "It is the 'Count of monthly suggestions (Call and RTE) for a prescriber.",
+  "which dossier gives a detailed analysis about the payors?": "You can find detailed analysis about Payor data in the Payor Highlights dossier.",
+  "where can i find explanations about different kpis?": "Explanations and Calculation of each and every KPI can be found in the Glossary dossier.",
+  "what is mkt % lis?": "Mkt % LIS in the Percentage of claims where claim type is 'PAID' and channel is 'Medicare' and 'Medicare D', and OPC = $0 - $12 and LIS patient flag = LIS-DE , LIS LTC, LIS-NON-DE, LIS-UNKNOWN for Rolling 3M.",
+  "which universes do we show in accounts calculation?": "We show three universes Veeva Aligned, Call Plan/DMCP and a combined Veeva Aligned + Call Plan/DMCP universes.",
+  "where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier."
 };
 
 const HARDCODED_SUGGESTIONS = [
-"Where can I find top 10 Gainer Prescriber over time?",
-"What is Formulary Status?",
-"What are the Number of Current Monthly suggestion KPI?",
-"Which dossier gives a detailed analysis about the Payors?",
-"Where can I find explanations about different KPIS?",
-"What is Mkt % LIS?",
-"Which universes do we show in Accounts calculation?",
-"Where can I find TRX Sales trends overtime?"
+  "Where can I find top 10 Gainer Prescriber over time?",
+  "What is Formulary Status?",
+  "What are the Number of Current Monthly suggestion KPI?",
+  "Which dossier gives a detailed analysis about the Payors?",
+  "Where can I find explanations about different KPIS?",
+  "What is Mkt % LIS?",
+  "Which universes do we show in Accounts calculation?",
+  "Where can I find TRX Sales trends overtime?"
 ];
 
 // Helper: Format response for plain text fallback (errors, etc)
 function formatSnowflakeResponse(responseText) {
   try {
-    const json = JSON.parse(responseText);
+    let json = JSON.parse(responseText);
 
-    if (json.error) return "❌ Error: " + json.error;
+    // --- Agent output in Snowflake variant column/table format ---
+    if (
+      json.resultSetMetaData &&
+      json.resultSetMetaData.rowType &&
+      json.resultSetMetaData.rowType.length === 1 &&
+      /^CUSTOM_AGENT/i.test(json.resultSetMetaData.rowType[0].name) &&
+      Array.isArray(json.data) &&
+      json.data.length > 0 &&
+      json.data[0][0]
+    ) {
+      try {
+        const cellValue = json.data[0][0];
+        // Parse the JSON string inside the cell
+        const agentObj = JSON.parse(cellValue);
+        if (typeof agentObj.output === "string") {
+          return { type: "output", value: agentObj.output };
+        }
+      } catch (e) {
+        // Fallback: just show the string
+        return { type: "output", value: json.data[0][0] };
+      }
+    }
+
+    // Agent gateway direct output (from older responses)
+    const agentKey = Object.keys(json).find(key => key.startsWith("CUSTOM_AGENT"));
+    if (agentKey && typeof json[agentKey] === "string") {
+      try {
+        const agentObj = JSON.parse(json[agentKey]);
+        if (typeof agentObj.output === "string") {
+          return { type: "output", value: agentObj.output };
+        }
+        return { type: "json", value: agentObj };
+      } catch {
+        return { type: "output", value: json[agentKey] };
+      }
+    }
+
+    // Table/structured result (Snowflake direct query)
+    const columns =
+      (json.resultSetMetaData && json.resultSetMetaData.rowType && json.resultSetMetaData.rowType.map(col => col.name)) ||
+      (json.rowType && json.rowType.map(col => col.name)) ||
+      (json.rowtype && json.rowtype.map(col => col.name)) ||
+      (json.columns && json.columns.map(col => col.name));
+    const data = json.data;
+    if (Array.isArray(columns) && columns.length > 0 && Array.isArray(data)) {
+      return {
+        type: "table",
+        columns,
+        data
+      };
+    }
+
+    if (json.error) return { type: "error", value: "❌ Error: " + json.error };
     if (
       json.code &&
       json.code !== "000000" &&
       (!json.message || !json.message.toLowerCase().includes("executed successfully"))
     ) {
-      return `❌ Error: ${json.code} - ${json.message}`;
+      return { type: "error", value: `❌ Error: ${json.code} - ${json.message}` };
     }
-    if (json.message) return json.message;
-    return "No data found.";
+    if (json.message) return { type: "output", value: json.message };
+
+    return { type: "output", value: "No data found." };
   } catch {
-    return responseText || "No response from Snowflake.";
+    return { type: "error", value: responseText || "No response from Snowflake." };
   }
 }
 
@@ -54,7 +107,6 @@ const ChatBot = () => {
   });
 
   const [feedback, setFeedback] = useState({});
-  // Suggestion index for rotating hardcoded suggestions
   const [suggestionIndex, setSuggestionIndex] = useState(() => {
     const stored = localStorage.getItem('suggestionIndex');
     return stored ? parseInt(stored, 10) : 0;
@@ -68,7 +120,7 @@ const ChatBot = () => {
   const chatRef = useRef();
   const inputRef = useRef();
 
-  // Only show 4 rotating suggestions at a time
+  // Only show 4 rotating suggestions
   const visibleSuggestions = Array(4)
     .fill(0)
     .map((_, i) => HARDCODED_SUGGESTIONS[(suggestionIndex + i) % HARDCODED_SUGGESTIONS.length]);
@@ -103,22 +155,42 @@ const ChatBot = () => {
     setMessages(pendingList);
     localStorage.setItem('chatMessages', JSON.stringify(pendingList));
 
-    // Send to Node proxy backend
+    // Decide whether to use agent_gateway SP or direct SQL
+    const isLikelySQL = userMessage.trim().toLowerCase().startsWith('select')
+      || userMessage.trim().toLowerCase().startsWith('show')
+      || userMessage.trim().toLowerCase().startsWith('desc')
+      || userMessage.trim().toLowerCase().startsWith('describe');
+
     try {
+      let body;
+      if (isLikelySQL) {
+        // Direct SQL query
+        body = { statement: userMessage };
+      } else {
+        // Pass through AGENT gateway SP
+        body = { statement: `CALL CUSTOM_AGENT2('${userMessage.replace(/'/g, "''")}');` };
+      }
+
       const response = await fetch('http://localhost:4000/api/snowflake', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statement: userMessage })
+        body: JSON.stringify(body)
       });
       const responseText = await response.text();
 
-      // Save BOTH the pretty text and raw JSON in the message
       const formatted = formatSnowflakeResponse(responseText);
-      const updatedMessages = [...newMessages, { role: 'assistant', text: formatted, rawJson: responseText }];
+
+      const updatedMessages = [
+        ...newMessages,
+        {
+          role: 'assistant',
+          text: formatted,
+        }
+      ];
       setMessages(updatedMessages);
       localStorage.setItem('chatMessages', JSON.stringify(updatedMessages));
     } catch (err) {
-      const formatted = "⚠️ Unable to connect to backend.";
+      const formatted = { type: "error", value: "⚠️ Unable to connect to backend." };
       const updatedMessages = [...newMessages, { role: 'assistant', text: formatted }];
       setMessages(updatedMessages);
       localStorage.setItem('chatMessages', JSON.stringify(updatedMessages));
@@ -134,68 +206,72 @@ const ChatBot = () => {
 
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  // Core chat bubble renderer
+  // Render assistant output smartly
   const renderChatBubbleContent = (msg) => {
-    // Try to render as HTML table if possible (from rawJson)
-    if (msg.rawJson) {
-      try {
-        const json = JSON.parse(msg.rawJson);
-        const columns =
-          (json.resultSetMetaData && json.resultSetMetaData.rowType && json.resultSetMetaData.rowType.map(col => col.name)) ||
-          (json.rowType && json.rowType.map(col => col.name)) ||
-          (json.rowtype && json.rowtype.map(col => col.name)) ||
-          (json.columns && json.columns.map(col => col.name));
-        const data = json.data;
-        if (Array.isArray(columns) && columns.length > 0 && Array.isArray(data)) {
-          return (
-            <table className="snowflake-table">
-              <thead>
+    // If formatted object, handle by type
+    if (typeof msg.text === "object" && msg.text !== null) {
+      const obj = msg.text;
+      if (obj.type === "table") {
+        // Render as table
+        return (
+          <table className="snowflake-table">
+            <thead>
+              <tr>
+                {obj.columns.map((h, i) => <th key={i}>{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {obj.data.length === 0 ? (
                 <tr>
-                  {columns.map((h, i) => <th key={i}>{h}</th>)}
+                  <td colSpan={obj.columns.length} style={{ textAlign: 'center', color: '#888' }}>(no results)</td>
                 </tr>
-              </thead>
-              <tbody>
-                {data.length === 0 ? (
-                  <tr><td colSpan={columns.length} style={{ textAlign: 'center', color: '#888' }}>(no results)</td></tr>
-                ) : data.map((row, ridx) => (
-                  <tr key={ridx}>
-                    {row.map((cell, cidx) => (
-                      <td key={cidx} style={{
-                        whiteSpace: 'pre-wrap',
-                        fontFamily: typeof cell === "string" && cell.trim().startsWith('[') ? "monospace" : undefined
-                      }}>
-                        {(() => {
-                          try {
-                            if (typeof cell === "string" && (cell.trim().startsWith('[') || cell.trim().startsWith('{'))) {
-                              const parsed = JSON.parse(cell);
-                              if (Array.isArray(parsed)) {
-                                return (
-                                  <ul style={{ paddingLeft: '18px', margin: 0 }}>
-                                    {parsed.map((item, idx) => <li key={idx}>{item}</li>)}
-                                  </ul>
-                                );
-                              }
-                              if (typeof parsed === 'object') {
-                                return <pre>{JSON.stringify(parsed, null, 2)}</pre>;
-                              }
+              ) : obj.data.map((row, ridx) => (
+                <tr key={ridx}>
+                  {row.map((cell, cidx) => (
+                    <td key={cidx} style={{
+                      whiteSpace: 'pre-wrap',
+                      fontFamily: typeof cell === "string" && cell.trim().startsWith('[') ? "monospace" : undefined
+                    }}>
+                      {(() => {
+                        try {
+                          if (typeof cell === "string" && (cell.trim().startsWith('[') || cell.trim().startsWith('{'))) {
+                            const parsed = JSON.parse(cell);
+                            if (Array.isArray(parsed)) {
+                              return (
+                                <ul style={{ paddingLeft: '18px', margin: 0 }}>
+                                  {parsed.map((item, idx) => <li key={idx}>{item}</li>)}
+                                </ul>
+                              );
                             }
-                            return cell;
-                          } catch {
-                            return cell;
+                            if (typeof parsed === 'object') {
+                              return <pre>{JSON.stringify(parsed, null, 2)}</pre>;
+                            }
                           }
-                        })()}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          );
-        }
-      } catch {}
+                          return cell;
+                        } catch {
+                          return cell;
+                        }
+                      })()}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
+      }
+      if (obj.type === "output") {
+        // Output is a simple text string
+        return <div>{obj.value}</div>;
+      }
+      if (obj.type === "error") {
+        return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{obj.value}</span>;
+      }
+      // Fallback for unhandled
+      return <pre>{JSON.stringify(obj.value, null, 2)}</pre>;
     }
     // Fallback: plain text (with newlines)
-    return msg.text.split('\n').map((line, i) => (
+    return (msg.text || "").split('\n').map((line, i) => (
       <div key={i}>{line}</div>
     ));
   };
@@ -220,7 +296,7 @@ const ChatBot = () => {
           >
             <header className="chatbot-header">
               <span style={{ fontWeight: 600 }}>
-                Field Insights <span style={{ color: '#6b38fb' }}>Assistant</span>
+                ORION <span style={{ color: '#6b38fb' }}>Field Assistant</span>
               </span>
               <div className="header-actions">
                 {/* Theme toggle */}
@@ -253,7 +329,6 @@ const ChatBot = () => {
                 {/* Refresh */}
                 <button
                   onClick={() => {
-                    // Rotate suggestions
                     const newIndex = (suggestionIndex + 4) % HARDCODED_SUGGESTIONS.length;
                     setSuggestionIndex(newIndex);
                     localStorage.setItem('suggestionIndex', newIndex.toString());
@@ -306,16 +381,6 @@ const ChatBot = () => {
                 >
                   <div
                     className={`chat-bubble ${msg.role}`}
-                    style={{
-                      background: msg.role === 'user'
-                        ? 'linear-gradient(95deg, #7c3aed 60%, #a78bfa 100%)'
-                        : 'linear-gradient(135deg, #f0f4ff, #e9e8fe)',
-                      color: msg.role === 'user' ? '#fff' : '#23234a',
-                      borderTopRightRadius: msg.role === 'user' ? 22 : 16,
-                      borderTopLeftRadius: msg.role === 'assistant' ? 22 : 16,
-                      alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                      position: 'relative'
-                    }}
                   >
                     {renderChatBubbleContent(msg)}
                   </div>
