@@ -3,7 +3,6 @@ import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
 import ZSIcon from '../assets/ZS_Associates.png';
 
-// Hardcoded answers (business questions) - as per your logic
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
   "what is formulary status?": "Formulary Status is the 'MMIT Pharmacy field which shows Preferred/Covered combined with PA/ST Restrictions.",
@@ -16,22 +15,26 @@ const HARDCODED_ANSWERS = {
 };
 
 const HARDCODED_SUGGESTIONS = [
-  "Where can I find top 10 Gainer Prescriber over time?",
-  "What is Formulary Status?",
-  "What are the Number of Current Monthly suggestion KPI?",
-  "Which dossier gives a detailed analysis about the Payors?",
-  "Where can I find explanations about different KPIS?",
-  "What is Mkt % LIS?",
   "Which universes do we show in Accounts calculation?",
-  "Where can I find TRX Sales trends overtime?"
+  "Where can I find TRX Sales trends overtime?",
+  "Where can I find top 10 Gainer Prescriber over time?",
+  "What is Formulary Status?"
 ];
 
-// Helper: Format response for plain text fallback (errors, etc)
+const GENERIC_GREETINGS = [
+  "hi", "hello", "hey", "how are you", "good morning", "good afternoon", "good evening",
+  "hiya", "yo", "hii", "hello there", "hey there", "hi there"
+];
+
+function isGreeting(text) {
+  const cleaned = text.trim().toLowerCase();
+  return GENERIC_GREETINGS.some(g => cleaned === g || cleaned.startsWith(g + ' '));
+}
+
 function formatSnowflakeResponse(responseText) {
   try {
     let json = JSON.parse(responseText);
 
-    // --- Agent output in Snowflake variant column/table format ---
     if (
       json.resultSetMetaData &&
       json.resultSetMetaData.rowType &&
@@ -43,18 +46,15 @@ function formatSnowflakeResponse(responseText) {
     ) {
       try {
         const cellValue = json.data[0][0];
-        // Parse the JSON string inside the cell
         const agentObj = JSON.parse(cellValue);
         if (typeof agentObj.output === "string") {
           return { type: "output", value: agentObj.output };
         }
       } catch (e) {
-        // Fallback: just show the string
         return { type: "output", value: json.data[0][0] };
       }
     }
 
-    // Agent gateway direct output (from older responses)
     const agentKey = Object.keys(json).find(key => key.startsWith("CUSTOM_AGENT"));
     if (agentKey && typeof json[agentKey] === "string") {
       try {
@@ -68,7 +68,6 @@ function formatSnowflakeResponse(responseText) {
       }
     }
 
-    // Table/structured result (Snowflake direct query)
     const columns =
       (json.resultSetMetaData && json.resultSetMetaData.rowType && json.resultSetMetaData.rowType.map(col => col.name)) ||
       (json.rowType && json.rowType.map(col => col.name)) ||
@@ -99,6 +98,15 @@ function formatSnowflakeResponse(responseText) {
   }
 }
 
+// --- Typing Indicator Component ---
+function TypingIndicator() {
+  return (
+    <span className="typing-indicator">
+      <span></span><span></span><span></span>
+    </span>
+  );
+}
+
 const ChatBot = () => {
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem('chatMessages');
@@ -111,65 +119,90 @@ const ChatBot = () => {
     const stored = localStorage.getItem('suggestionIndex');
     return stored ? parseInt(stored, 10) : 0;
   });
-
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [toast, setToast] = useState('');
+  const [clickedIndex, setClickedIndex] = useState(null);
+  const [isTyping, setIsTyping] = useState(false); // <--- Typing state
   const chatRef = useRef();
   const inputRef = useRef();
 
-  // Only show 4 rotating suggestions
-  const visibleSuggestions = Array(4)
+  // Suggestion randomizer for clear chat
+  const randomizeSuggestions = () => {
+    let newIndex = Math.floor(Math.random() * HARDCODED_SUGGESTIONS.length);
+    if (HARDCODED_SUGGESTIONS.length > 1 && newIndex === suggestionIndex) {
+      newIndex = (newIndex + 1) % HARDCODED_SUGGESTIONS.length;
+    }
+    setSuggestionIndex(newIndex);
+    localStorage.setItem('suggestionIndex', newIndex.toString());
+  };
+
+  // 2 or 4 suggestions based on expansion
+  const numSuggestions = isExpanded ? 4 : 2;
+  const visibleSuggestions = Array(numSuggestions)
     .fill(0)
     .map((_, i) => HARDCODED_SUGGESTIONS[(suggestionIndex + i) % HARDCODED_SUGGESTIONS.length]);
 
+  // Scroll chat to bottom on update
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isTyping, isOpen, isExpanded]);
 
-  // Send user message to backend and update chat
+  // Prevent input scrolling
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.scrollLeft = inputRef.current.value.length * 8;
+    }
+  }, [input]);
+
   const handleSendMessage = async (userMessage) => {
     if (!userMessage.trim()) return;
     const newMessages = [...messages, { role: 'user', text: userMessage }];
     setMessages(newMessages);
     localStorage.setItem('chatMessages', JSON.stringify(newMessages));
     setInput('');
+    setIsTyping(true); // <--- Start typing indicator
 
-    // HARDCODED ANSWER CHECK
+    if (isGreeting(userMessage)) {
+      const greetingResponse =
+        "Hello! 👋 How can I assist you with your field insights or business data today?";
+      setTimeout(() => {
+        setIsTyping(false);
+        const updatedMessages = [...newMessages, { role: 'assistant', text: greetingResponse }];
+        setMessages(updatedMessages);
+        localStorage.setItem('chatMessages', JSON.stringify(updatedMessages));
+      }, 700);
+      return;
+    }
+
+    // HARDCODED business mode answers
     const cleaned = userMessage.trim().toLowerCase();
     const matchedKey = Object.keys(HARDCODED_ANSWERS).find(
       k => cleaned.includes(k)
     );
     if (matchedKey) {
       const hardcodedAnswer = HARDCODED_ANSWERS[matchedKey];
-      const updatedMessages = [...newMessages, { role: 'assistant', text: hardcodedAnswer }];
-      setMessages(updatedMessages);
-      localStorage.setItem('chatMessages', JSON.stringify(updatedMessages));
+      setTimeout(() => {
+        setIsTyping(false);
+        const updatedMessages = [...newMessages, { role: 'assistant', text: hardcodedAnswer }];
+        setMessages(updatedMessages);
+        localStorage.setItem('chatMessages', JSON.stringify(updatedMessages));
+      }, 650);
       return;
     }
 
-    // Show loading message
-    const pendingList = [...newMessages, { role: 'assistant', text: '⏳ Querying Snowflake...' }];
-    setMessages(pendingList);
-    localStorage.setItem('chatMessages', JSON.stringify(pendingList));
-
-    // Decide whether to use agent_gateway SP or direct SQL
+    // Show typing indicator (no pending message in chat)
     const isLikelySQL = userMessage.trim().toLowerCase().startsWith('select')
       || userMessage.trim().toLowerCase().startsWith('show')
       || userMessage.trim().toLowerCase().startsWith('desc')
       || userMessage.trim().toLowerCase().startsWith('describe');
 
     try {
-      let body;
-      if (isLikelySQL) {
-        // Direct SQL query
-        body = { statement: userMessage };
-      } else {
-        // Pass through AGENT gateway SP
-        body = { statement: `CALL CUSTOM_AGENT2('${userMessage.replace(/'/g, "''")}');` };
-      }
+      let body = isLikelySQL
+        ? { statement: userMessage }
+        : { statement: `CALL CUSTOM_AGENT2('${userMessage.replace(/'/g, "''")}');` };
 
       const response = await fetch('http://localhost:4000/api/snowflake', {
         method: 'POST',
@@ -177,9 +210,9 @@ const ChatBot = () => {
         body: JSON.stringify(body)
       });
       const responseText = await response.text();
-
       const formatted = formatSnowflakeResponse(responseText);
 
+      setIsTyping(false);
       const updatedMessages = [
         ...newMessages,
         {
@@ -190,6 +223,7 @@ const ChatBot = () => {
       setMessages(updatedMessages);
       localStorage.setItem('chatMessages', JSON.stringify(updatedMessages));
     } catch (err) {
+      setIsTyping(false);
       const formatted = { type: "error", value: "⚠️ Unable to connect to backend." };
       const updatedMessages = [...newMessages, { role: 'assistant', text: formatted }];
       setMessages(updatedMessages);
@@ -197,7 +231,6 @@ const ChatBot = () => {
     }
   };
 
-  // Feedback handlers
   const handleFeedback = (idx, type) => {
     setFeedback(prev => ({ ...prev, [idx]: type }));
     setToast('Thanks for your feedback!');
@@ -206,13 +239,11 @@ const ChatBot = () => {
 
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  // Render assistant output smartly
+  // Render assistant output
   const renderChatBubbleContent = (msg) => {
-    // If formatted object, handle by type
     if (typeof msg.text === "object" && msg.text !== null) {
       const obj = msg.text;
       if (obj.type === "table") {
-        // Render as table
         return (
           <table className="snowflake-table">
             <thead>
@@ -261,43 +292,48 @@ const ChatBot = () => {
         );
       }
       if (obj.type === "output") {
-        // Output is a simple text string
         return <div>{obj.value}</div>;
       }
       if (obj.type === "error") {
         return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{obj.value}</span>;
       }
-      // Fallback for unhandled
       return <pre>{JSON.stringify(obj.value, null, 2)}</pre>;
     }
-    // Fallback: plain text (with newlines)
     return (msg.text || "").split('\n').map((line, i) => (
       <div key={i}>{line}</div>
     ));
   };
 
+  // Suggestion button microinteraction
+  const handleSuggestionClick = (s, i, e) => {
+    setClickedIndex(i);
+    setTimeout(() => setClickedIndex(null), 220);
+    handleSendMessage(s);
+  };
+
+  // Main render
   return (
-    <>
-      <div style={{ background: 'linear-gradient(to bottom right, #f7faff, #e2ecf4)', minHeight: '100vh' }}>
-        <button
-          className="chatbot-toggler modern-toggler"
-          onClick={() => setIsOpen(!isOpen)}
-          aria-label="Toggle chatbot"
-          style={{ position: 'fixed', right: '20px', bottom: '20px', zIndex: 10000 }}>
-          {isOpen ? '✖' : <img src={ChatbotIcon} alt="Chatbot" style={{ width: 48, height: 48 }} />}
-        </button>
-        {isOpen && (
-          <div
-            className={
-              `chatbot modern-chatbot` +
-              (darkMode ? ' dark-mode' : '') +
-              (isExpanded ? ' expanded' : ' collapsed')
-            }
-          >
-            <header className="chatbot-header">
-              <span style={{ fontWeight: 600 }}>
-                Field Insights<span style={{ color: '#6b38fb' }}> Assistant</span>
-              </span>
+    <div style={{ background: 'linear-gradient(to bottom right, #f7faff, #e2ecf4)', minHeight: '100vh' }}>
+      <button
+        className="chatbot-toggler modern-toggler"
+        onClick={() => setIsOpen(!isOpen)}
+        aria-label="Toggle chatbot"
+        style={{ position: 'fixed', right: '20px', bottom: '20px', zIndex: 10000 }}>
+        {isOpen ? '✖' : <img src={ChatbotIcon} alt="Chatbot" style={{ width: 48, height: 48 }} />}
+      </button>
+      {isOpen && (
+        <div
+          className={
+            `chatbot modern-chatbot` +
+            (darkMode ? ' dark-mode' : '') +
+            (isExpanded ? ' expanded' : ' collapsed')
+          }
+        >
+          <header className="chatbot-header">
+            <span className="header-title">
+              Field Insights<span className="header-title-gradient"> Assistant</span>
+            </span>
+            <div className="header-controls">
               <div className="header-actions">
                 {/* Theme toggle */}
                 <button
@@ -307,7 +343,7 @@ const ChatBot = () => {
                   aria-label="Toggle theme"
                 >
                   {darkMode ? (
-                    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none">
                       <circle cx="12" cy="12" r="5" fill="#7c3aed" />
                       <g stroke="#7c3aed" strokeWidth="2">
                         <line x1="12" y1="2" x2="12" y2="5" />
@@ -321,17 +357,15 @@ const ChatBot = () => {
                       </g>
                     </svg>
                   ) : (
-                    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+                    <svg width="25" height="25" viewBox="0 0 24 24" fill="none">
                       <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 0010.02 9.79z" fill="#7c3aed" />
                     </svg>
                   )}
                 </button>
-                {/* Refresh */}
+                {/* Refresh/Clear + randomize suggestions */}
                 <button
                   onClick={() => {
-                    const newIndex = (suggestionIndex + 4) % HARDCODED_SUGGESTIONS.length;
-                    setSuggestionIndex(newIndex);
-                    localStorage.setItem('suggestionIndex', newIndex.toString());
+                    randomizeSuggestions();
                     setMessages([{ role: 'assistant', text: 'Hello 👋! How may I assist you?' }]);
                     localStorage.removeItem('chatMessages');
                     setFeedback({});
@@ -340,7 +374,7 @@ const ChatBot = () => {
                   className="header-action-btn"
                   aria-label="Clear chat"
                 >
-                  <svg width="23" height="23" fill="none" stroke="#7c3aed" strokeWidth="2.1" viewBox="0 0 24 24">
+                  <svg width="25" height="25" fill="none" stroke="#7c3aed" strokeWidth="2.1" viewBox="0 0 24 24">
                     <path d="M4.93 4.93a10 10 0 1014.14 0M23 4v6h-6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
@@ -352,14 +386,14 @@ const ChatBot = () => {
                   aria-label={isExpanded ? 'Collapse window' : 'Expand window'}
                 >
                   {isExpanded ? (
-                    <svg width="23" height="23" fill="none" stroke="#7c3aed" strokeWidth="2.1" viewBox="0 0 24 24">
+                    <svg width="25" height="25" fill="none" stroke="#7c3aed" strokeWidth="2.1" viewBox="0 0 24 24">
                       <polyline points="8 3 3 3 3 8" />
                       <line x1="3" y1="3" x2="10" y2="10" />
                       <polyline points="16 21 21 21 21 16" />
                       <line x1="21" y1="21" x2="14" y2="14" />
                     </svg>
                   ) : (
-                    <svg width="23" height="23" fill="none" stroke="#7c3aed" strokeWidth="2.1" viewBox="0 0 24 24">
+                    <svg width="25" height="25" fill="none" stroke="#7c3aed" strokeWidth="2.1" viewBox="0 0 24 24">
                       <polyline points="15 3 21 3 21 9" />
                       <line x1="21" y1="3" x2="14" y2="10" />
                       <polyline points="9 21 3 21 3 15" />
@@ -368,81 +402,122 @@ const ChatBot = () => {
                   )}
                 </button>
               </div>
-            </header>
-            <ul className="chatbox" ref={chatRef}>
-              {messages.map((msg, idx) => (
-                <li
-                  key={idx}
-                  className={`chat ${msg.role === 'user' ? 'outgoing' : 'incoming'}`}
-                  style={{
-                    justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                    animation: 'fadeIn 0.25s cubic-bezier(.36,1.7,.72,.97)'
-                  }}
-                >
-                  <div
-                    className={`chat-bubble ${msg.role}`}
-                  >
-                    {renderChatBubbleContent(msg)}
+            </div>
+          </header>
+          <ul className="chatbox" ref={chatRef}>
+            {messages.map((msg, idx) => (
+              <li
+                key={idx}
+                className={`chat ${msg.role === 'user' ? 'outgoing' : 'incoming'}`}
+                style={{
+                  justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                }}
+              >
+                <div className={`chat-bubble ${msg.role}`}>
+                  {renderChatBubbleContent(msg)}
+                </div>
+                {msg.role === 'assistant' && (
+                  <div className="feedback-row">
+                    {feedback[idx] === undefined && (
+                      <>
+                        <button
+                          className="feedback-btn"
+                          onClick={() => handleFeedback(idx, 'up')}
+                          aria-label="Thumbs up"
+                        >👍</button>
+                        <button
+                          className="feedback-btn"
+                          onClick={() => handleFeedback(idx, 'down')}
+                          aria-label="Thumbs down"
+                        >👎</button>
+                      </>
+                    )}
+                    {feedback[idx] === 'up' && (
+                      <button className="feedback-btn selected" aria-label="Thumbs up">👍</button>
+                    )}
+                    {feedback[idx] === 'down' && (
+                      <button className="feedback-btn selected" aria-label="Thumbs down">👎</button>
+                    )}
                   </div>
-                  {msg.role === 'assistant' && (
-                    <div className="feedback-row">
-                      {feedback[idx] === undefined && (
-                        <>
-                          <button
-                            className="feedback-btn"
-                            onClick={() => handleFeedback(idx, 'up')}
-                            aria-label="Thumbs up"
-                          >👍</button>
-                          <button
-                            className="feedback-btn"
-                            onClick={() => handleFeedback(idx, 'down')}
-                            aria-label="Thumbs down"
-                          >👎</button>
-                        </>
-                      )}
-                      {feedback[idx] === 'up' && (
-                        <button className="feedback-btn selected" aria-label="Thumbs up">👍</button>
-                      )}
-                      {feedback[idx] === 'down' && (
-                        <button className="feedback-btn selected" aria-label="Thumbs down">👎</button>
-                      )}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-            <div className="suggestions">
-              {visibleSuggestions.map((s, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleSendMessage(s)}
-                  className="suggestion-button"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-            <div className="chat-input">
-              <textarea
-                ref={inputRef}
-                placeholder="Ask me anything..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage(input)}
-                rows={2}
-              ></textarea>
-              <button onClick={() => handleSendMessage(input)} title="Send message" className="send-button">
-                Send
+                )}
+              </li>
+            ))}
+            {/* Typing indicator */}
+            {isTyping && (
+              <li className="chat incoming">
+                <div className="chat-bubble assistant">
+                  <TypingIndicator />
+                </div>
+              </li>
+            )}
+          </ul>
+          {/* Suggestions panel now at the bottom */}
+          <div className="suggestions" style={{ position: "relative" }}>
+            {/* Show right arrow only in minimized mode */}
+            {visibleSuggestions.map((s, i) => (
+              <button
+                key={i}
+                onClick={e => handleSuggestionClick(s, i, e)}
+                className={`suggestion-button${clickedIndex === i ? ' clicked' : ''}`}
+              >
+                {s}
               </button>
-            </div>
-            <footer className="chatbot-footer">
-              Powered by <img src={ZSIcon} alt="ZS Associates" />
-            </footer>
-            {toast && <div className="toast">{toast}</div>}
+            ))}
+            { !isExpanded &&
+              <button
+                className="suggestion-arrow right"
+                aria-label="Next suggestions"
+                onClick={() => {
+                  const max = HARDCODED_SUGGESTIONS.length;
+                  setSuggestionIndex((prev) => (prev + 1) % max);
+                  localStorage.setItem(
+                    "suggestionIndex",
+                    ((suggestionIndex + 1) % max).toString()
+                  );
+                }}
+                style={{
+                  border: "none",
+                  background: "none",
+                  cursor: "pointer",
+                  fontSize: 20,
+                  marginLeft: 7,
+                  color: "#7c3aed",
+                  alignSelf: "center",
+                  height: 28,
+                  width: 28
+                }}
+              >&#8594;</button>
+            }
           </div>
-        )}
-      </div>
-    </>
+          <div className="chat-input">
+            <textarea
+              ref={inputRef}
+              placeholder="Ask me anything..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage(input)}
+              rows={1}
+              className="chat-input-textarea"
+              style={{overflow: 'hidden', resize: 'none'}}
+            />
+            <button
+              onClick={() => handleSendMessage(input)}
+              title="Send message"
+              className={`send-button${input.trim() ? " has-text" : ""}`}
+            >
+              {/* SVG send icon */}
+              <svg height="22" width="22" viewBox="0 0 24 24" fill="none" style={{display:"block"}}>
+                <path d="M4 20L20 12L4 4V10L16 12L4 14V20Z" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+          <footer className="chatbot-footer">
+            Powered by <img src={ZSIcon} alt="ZS Associates" />
+          </footer>
+          {toast && <div className="toast">{toast}</div>}
+        </div>
+      )}
+    </div>
   );
 };
 
