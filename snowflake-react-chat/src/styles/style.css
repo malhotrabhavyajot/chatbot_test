@@ -219,6 +219,7 @@ body {
 /* Chatbox / Messages */
 .chatbox {
   overflow-y: auto;
+  overflow-x: hidden;    /* ADDED: fix horizontal scroll */
   padding: 22px 20px;
   flex: 1;
   display: flex;
@@ -226,6 +227,7 @@ body {
   gap: 13px;
   background: #fff;
   scroll-behavior: smooth;
+  min-width: 0;          /* ADDED: fix for flex overflows */
 }
 .dark-mode .chatbox {
   background: #181824 !important;
@@ -238,6 +240,7 @@ body {
   max-width: 98%;
   align-items: flex-end;
   animation: fadeIn 0.21s cubic-bezier(.36,1.7,.72,.97);
+  min-width: 0;    /* ADDED: ensure no overflow */
 }
 .chatbox .incoming { justify-content: flex-start; }
 .chatbox .outgoing { justify-content: flex-end; }
@@ -247,10 +250,12 @@ body {
   padding: 15px 18px;
   border-radius: 19px;
   margin-bottom: 2px;
-  min-width: 48px;
+  min-width: 0;            /* ADDED: flex shrink fix */
   max-width: 81%;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
   transition: box-shadow 0.18s, transform 0.22s cubic-bezier(.36,1.7,.72,.97), background 0.18s;
   animation: fadeInUp 0.23s cubic-bezier(.36,1.7,.72,.97);
   box-shadow: 0 3px 18px 0 rgba(123, 51, 237, 0.10), 0 1.5px 8px 0 #7c3aed13;
