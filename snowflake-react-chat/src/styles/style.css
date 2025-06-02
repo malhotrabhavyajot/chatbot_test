@@ -30,8 +30,8 @@ body {
 }
 
 .chatbot.modern-chatbot.collapsed {
-  width: 600px;
-  height: 800px;
+  width: 480px;
+  height: 850px;
   max-width: 600px;
 }
 .chatbot.modern-chatbot.expanded {
