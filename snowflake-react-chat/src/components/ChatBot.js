@@ -107,6 +107,14 @@ function TypingIndicator() {
   );
 }
 
+// Tooltip helper
+const Tooltip = ({ children, text }) => (
+  <span className="feedback-tooltip">
+    {children}
+    <span className="feedback-tooltiptext">{text}</span>
+  </span>
+);
+
 const ChatBot = () => {
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem('chatMessages');
@@ -123,9 +131,9 @@ const ChatBot = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
   const [clickedIndex, setClickedIndex] = useState(null);
-  const [isTyping, setIsTyping] = useState(false); // <--- Typing state
+  const [isTyping, setIsTyping] = useState(false);
   const chatRef = useRef();
   const inputRef = useRef();
 
@@ -157,13 +165,27 @@ const ChatBot = () => {
     }
   }, [input]);
 
+  // Auto-hide toast
+  useEffect(() => {
+    if (toast.visible) {
+      const timer = setTimeout(() => {
+        setToast(t => ({ ...t, visible: false }));
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.visible]);
+
+  const showToast = (msg, type) => {
+    setToast({ message: msg, type: type, visible: true });
+  };
+
   const handleSendMessage = async (userMessage) => {
     if (!userMessage.trim()) return;
     const newMessages = [...messages, { role: 'user', text: userMessage }];
     setMessages(newMessages);
     localStorage.setItem('chatMessages', JSON.stringify(newMessages));
     setInput('');
-    setIsTyping(true); // <--- Start typing indicator
+    setIsTyping(true);
 
     if (isGreeting(userMessage)) {
       const greetingResponse =
@@ -233,8 +255,7 @@ const ChatBot = () => {
 
   const handleFeedback = (idx, type) => {
     setFeedback(prev => ({ ...prev, [idx]: type }));
-    setToast('Thanks for your feedback!');
-    setTimeout(() => setToast(''), 1100);
+    showToast(type === "up" ? "Marked as helpful!" : "Marked as not helpful!", type === "up" ? "success" : "error");
   };
 
   const toggleTheme = () => setDarkMode(prev => !prev);
@@ -420,23 +441,33 @@ const ChatBot = () => {
                   <div className="feedback-row">
                     {feedback[idx] === undefined && (
                       <>
-                        <button
-                          className="feedback-btn"
-                          onClick={() => handleFeedback(idx, 'up')}
-                          aria-label="Thumbs up"
-                        >👍</button>
-                        <button
-                          className="feedback-btn"
-                          onClick={() => handleFeedback(idx, 'down')}
-                          aria-label="Thumbs down"
-                        >👎</button>
+                        <Tooltip text="Mark as helpful">
+                          <button
+                            className="feedback-btn"
+                            onClick={() => handleFeedback(idx, 'up')}
+                            aria-label="Thumbs up"
+                            tabIndex={0}
+                          >👍</button>
+                        </Tooltip>
+                        <Tooltip text="Mark as not helpful">
+                          <button
+                            className="feedback-btn"
+                            onClick={() => handleFeedback(idx, 'down')}
+                            aria-label="Thumbs down"
+                            tabIndex={0}
+                          >👎</button>
+                        </Tooltip>
                       </>
                     )}
                     {feedback[idx] === 'up' && (
-                      <button className="feedback-btn selected" aria-label="Thumbs up">👍</button>
+                      <Tooltip text="Marked as helpful!">
+                        <button className="feedback-btn selected up" aria-label="Thumbs up" tabIndex={0}>👍</button>
+                      </Tooltip>
                     )}
                     {feedback[idx] === 'down' && (
-                      <button className="feedback-btn selected" aria-label="Thumbs down">👎</button>
+                      <Tooltip text="Marked as not helpful">
+                        <button className="feedback-btn selected down" aria-label="Thumbs down" tabIndex={0}>👎</button>
+                      </Tooltip>
                     )}
                   </div>
                 )}
@@ -453,7 +484,6 @@ const ChatBot = () => {
           </ul>
           {/* Suggestions panel now at the bottom */}
           <div className="suggestions" style={{ position: "relative" }}>
-            {/* Show right arrow only in minimized mode */}
             {visibleSuggestions.map((s, i) => (
               <button
                 key={i}
@@ -511,10 +541,19 @@ const ChatBot = () => {
               </svg>
             </button>
           </div>
+          {/* Toast notification inside chatbox */}
+          {toast.visible && (
+            <div
+              className={`toast toast-${toast.type}`}
+              onClick={() => setToast(t => ({ ...t, visible: false }))}
+              style={{cursor:'pointer'}}
+            >
+              {toast.message}
+            </div>
+          )}
           <footer className="chatbot-footer">
             Powered by <img src={ZSIcon} alt="ZS Associates" />
           </footer>
-          {toast && <div className="toast">{toast}</div>}
         </div>
       )}
     </div>
