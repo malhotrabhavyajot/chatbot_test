@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
@@ -11,14 +12,20 @@ const HARDCODED_ANSWERS = {
   "where can i find explanations about different kpis?": "Explanations and Calculation of each and every KPI can be found in the Glossary dossier.",
   "what is mkt % lis?": "Mkt % LIS in the Percentage of claims where claim type is 'PAID' and channel is 'Medicare' and 'Medicare D', and OPC = $0 - $12 and LIS patient flag = LIS-DE , LIS LTC, LIS-NON-DE, LIS-UNKNOWN for Rolling 3M.",
   "which universes do we show in accounts calculation?": "We show three universes Veeva Aligned, Call Plan/DMCP and a combined Veeva Aligned + Call Plan/DMCP universes.",
-  "where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier."
+  "where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier.",
+  "are any physicians' sales dropped at a geo level?": "PDRP stands for Prescriber Data Restriction Program. Any prescriber who opts into the PDRP has their sales reported as zero. Sales from prescribers who have opted into the PDRP are included in the geography aggregation. If a geographic area has fewer than three actual PDRP participants, additional prescribers are randomly masked to simulate actual PDRP participation. Any prescriber masked as a PDRP in the R4W period remains masked for all other time periods."
 };
 
 const HARDCODED_SUGGESTIONS = [
   "Which universes do we show in Accounts calculation?",
   "Where can I find TRX Sales trends overtime?",
   "Where can I find top 10 Gainer Prescriber over time?",
-  "What is Formulary Status?"
+  "What is Formulary Status?",
+  "What are the number of current monthly suggestion KPIs?",
+  "Which dossier gives a detailed analysis about the Payors?",
+  "Where can I find explanations about different KPIs?",
+  "What is MKT % LIS?",
+  "Are any physicians' sales dropped at a geo level?"
 ];
 
 const GENERIC_GREETINGS = [
