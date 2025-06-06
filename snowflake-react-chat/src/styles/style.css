@@ -145,7 +145,6 @@ body {
   background: #312058 !important;
 }
 
-/* Responsive header tweaks */
 @media (min-width: 551px) {
   .chatbot.modern-chatbot.collapsed .chatbot-header {
     display: flex;
@@ -291,44 +290,29 @@ body {
   border: 1.5px solid #5233c0;
 }
 
-/* ---- Highlighted Output Block for Clarified Queries/SQL ---- */
-.assistant-output-block {
+/* Table for multi-point agent output */
+.snowflake-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 2px 0;
   background: #f7f4fd;
-  border-radius: 15px;
-  box-shadow: 0 3px 22px 0 #a78bfa24, 0 1.5px 8px #7c3aed13;
-  padding: 17px 18px 15px 18px;
-  margin: 8px 0 8px 0;
-  color: #3c2a71;
-  border: 1.7px solid #ede7fa;
-  font-size: 15px;
-  font-family: "Poppins", sans-serif;
-  position: relative;
-}
-.dark-mode .assistant-output-block {
-  background: #232345;
-  color: #a78bfa;
-  border: 1.5px solid #322a4d;
-  box-shadow: 0 3px 22px 0 #23234526, 0 1.5px 8px #7c3aed13;
-}
-.assistant-sql-block {
-  background: #efeafb;
-  color: #392378;
-  border-radius: 9px;
-  font-family: "Fira Mono", "Consolas", "Menlo", "monospace";
   font-size: 14px;
-  padding: 12px 12px;
-  margin: 0 0 4px 0;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  border: 1.1px solid #e1dafb;
+  font-family: 'Poppins', monospace;
 }
-.dark-mode .assistant-sql-block {
-  background: #232345;
-  color: #d4c5fd;
-  border: 1.1px solid #322a4d;
+.snowflake-table th, .snowflake-table td {
+  border: 1px solid #dad6f5;
+  padding: 5px 12px;
+  vertical-align: top;
+}
+.snowflake-table th {
+  background: #ede7fa;
+  color: #5233c0;
+}
+.snowflake-table tr:nth-child(even) {
+  background: #f4f2fc;
 }
 
-/* ---- Feedback Button Upgrades ---- */
+/* Feedback Buttons & Toasts */
 .feedback-row {
   display: flex;
   gap: 9px;
@@ -574,7 +558,7 @@ body {
   margin-top: 8px;
 }
 
-/* Chat Input: single row, send button aligned, send icon, placeholder always visible and aligned */
+/* Chat Input */
 .chat-input {
   display: flex;
   align-items: center;
@@ -634,7 +618,7 @@ body {
   color: #b3b1d1;
 }
 
-/* Send Button - icon only */
+/* Send Button */
 .send-button {
   background: #7c3aed;
   color: #fff;
@@ -736,28 +720,6 @@ body {
   transform: scale(1.09);
 }
 
-/* Tables (Snowflake-style) */
-.snowflake-table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 2px 0;
-  background: #f7f4fd;
-  font-size: 14px;
-  font-family: 'Poppins', monospace;
-}
-.snowflake-table th, .snowflake-table td {
-  border: 1px solid #dad6f5;
-  padding: 5px 12px;
-  vertical-align: top;
-}
-.snowflake-table th {
-  background: #ede7fa;
-  color: #5233c0;
-}
-.snowflake-table tr:nth-child(even) {
-  background: #f4f2fc;
-}
-
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px);}
@@ -802,94 +764,25 @@ body {
   30% { transform: translateY(-7px);}
 }
 
-
-.clarify-suggestion-block {
-  background: #f8f7fd;
-  border-top: 1.5px solid #eee;
-  border-radius: 0 0 18px 18px;
-  padding-bottom: 22px;
-}
-
-.clarify-suggestion-block label,
-.clarify-suggestion-block .clarify-section-label {
-  font-weight: 600;
-  font-size: 16px;
-  color: #7c3aed;
-  margin-bottom: 6px;
-  display: block;
-}
-
-.clarify-suggestion-block .suggestions .suggestion-button {
-  border: 2px solid #a78bfa;
-  background: #fff;
-  color: #7c3aed;
-  transition: background 0.16s, color 0.16s;
-  padding-top: 12px;
-  padding-bottom: 12px;
-}
-
-.clarify-suggestion-block .suggestion-button:hover {
-  background: #f3eaff;
-  color: #5233c0;
-  box-shadow: 0 2px 14px #a78bfa23;
-}
-
-.clarify-custom-input input {
-  border: 1.3px solid #a78bfa;
-  border-radius: 8px;
-  padding: 10px 13px;
+/* Clarify block/table tweaks for new agent multi-value output (optional) */
+.assistant-output-block {
+  background: #f7f4fd;
+  border-radius: 15px;
+  box-shadow: 0 3px 22px 0 #a78bfa24, 0 1.5px 8px #7c3aed13;
+  padding: 17px 18px 15px 18px;
+  margin: 8px 0 8px 0;
+  color: #3c2a71;
+  border: 1.7px solid #ede7fa;
   font-size: 15px;
+  font-family: "Poppins", sans-serif;
+  position: relative;
 }
-
-.send-button {
-  background: #a78bfa;
-  transition: background 0.14s, box-shadow 0.18s;
-}
-.send-button:hover {
-  background: #7c3aed;
-  box-shadow: 0 4px 12px #7c3aed29;
-}
-
-.chatbot-footer {
-  margin-top: 10px;
-}
-
-@media (max-width: 700px) {
-  .clarify-suggestion-block {
-    padding-left: 7px;
-    padding-right: 7px;
-  }
-  .clarify-suggestion-block .suggestions .suggestion-button {
-    min-width: 85px;
-    font-size: 13px;
-    padding-top: 9px;
-    padding-bottom: 9px;
-  }
+.dark-mode .assistant-output-block {
+  background: #232345;
+  color: #a78bfa;
+  border: 1.5px solid #322a4d;
+  box-shadow: 0 3px 22px 0 #23234526, 0 1.5px 8px #7c3aed13;
 }
 
 
-.finalize-button {
-  background: #7c3aed;
-  color: #fff;
-  border: none;
-  border-radius: 9px;
-  padding: 0 19px;
-  font-size: 15px;
-  font-weight: 600;
-  box-shadow: 0 2px 8px #7c3aed24;
-  cursor: pointer;
-  height: 38px;
-  margin-left: 5px;
-  transition: background 0.14s, box-shadow 0.18s;
-}
-.finalize-button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  background: #c4b6f7;
-}
-.finalize-button:hover:not(:disabled) {
-  background: #5233c0;
-  color: #fff;
-  box-shadow: 0 4px 12px #a78bfa23;
-}
 
