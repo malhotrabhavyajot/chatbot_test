@@ -1,3 +1,15 @@
-# Local Netlify folder
-.netlify
+=======
+# Local Netlify folder used for previews
+.netlify/
+
+# Node dependencies installed via npm
+node_modules/
+
+# Compiled React build output
+build/
+
+# Environment variable definitions
 .env
+
+# Log files
+*.log
