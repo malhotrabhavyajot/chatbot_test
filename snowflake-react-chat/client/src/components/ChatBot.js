@@ -146,7 +146,7 @@ const ChatBot = () => {
     setMessages(updatedMessages);
 
     try {
-      const response = await fetch('http://localhost:4000/api/clarify', {
+      const response = await fetch('https://chatbot-test-qwo8.onrender.com/api/clarify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userMessage })
@@ -164,7 +164,7 @@ const ChatBot = () => {
         }
 
         let body = { statement: `CALL CUSTOM_AGENT2('${finalPrompt.replace(/'/g, "''")}')` };
-        const snowflakeRes = await fetch('http://localhost:4000/api/snowflake', {
+        const snowflakeRes = await fetch('https://chatbot-test-qwo8.onrender.com/api/snowflake', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)

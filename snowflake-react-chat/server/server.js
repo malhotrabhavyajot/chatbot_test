@@ -10,7 +10,12 @@ const jwt = require('jsonwebtoken');
 const { OpenAI } = require('openai');
 
 const app = express();
-app.use(cors());
+
+// CORS: Restrict in production, open for dev
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000'
+}));
+
 app.use(express.json());
 
 // ====== SNOWFLAKE CONFIGURATION ======
@@ -118,7 +123,7 @@ app.post('/api/snowflake', async (req, res) => {
   }
 });
 
-// ====== OPENAI CLARIFY ROUTE (Conversational/Quick-Reply) ======
+// ====== OPENAI CLARIFY ROUTE ======
 const conversationHistories = {};
 const sessionId = "default";
 
@@ -126,8 +131,7 @@ app.post('/api/clarify', async (req, res) => {
   try {
     const { userMessage } = req.body;
 
-    // ---- Place your (long) systemPrompt string here as before ----
-    const systemPrompt = `
+const systemPrompt = `
 You are a reporting agent that helps answer reps by reading their reports for a pharmaceutical data analytics chatbot. 
 The queries reps ask are often incomplete, so you help them complete their query by asking for missing information in a conversational, friendly way.
 
@@ -310,14 +314,12 @@ Your response must ALWAYS be a valid JSON object as specified above. Do not incl
 Here is the user query:
 `;
 
-    // Initialize history if not present
     if (!conversationHistories[sessionId]) {
       conversationHistories[sessionId] = [
         { role: "system", content: systemPrompt }
       ];
     }
 
-    // Push the latest user message to the session history
     conversationHistories[sessionId].push({ role: "user", content: userMessage });
 
     const completion = await openai.chat.completions.create({
@@ -332,7 +334,6 @@ Here is the user query:
     try {
       parsed = JSON.parse(completion.choices[0].message.content);
 
-      // Push the assistant's reply to the conversation history
       conversationHistories[sessionId].push({
         role: "assistant",
         content: parsed.assistant_message
@@ -358,7 +359,11 @@ Here is the user query:
   }
 });
 
-// ====== START THE SERVER ======
+// ====== HEALTHCHECK ROUTE ======
 app.get('/test', (req, res) => res.send("SERVER FILE IS RUNNING!"));
 
-app.listen(4000, () => console.log('Proxy running on http://localhost:4000'));
+// ====== START THE SERVER ======
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => console.log(`Proxy running on http://localhost:${PORT}`));
+
+
