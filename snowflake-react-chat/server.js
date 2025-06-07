@@ -1,6 +1,6 @@
 // ======= server.js =======
 
-require('dotenv').config(); // Load .env (must be FIRST!)
+require('dotenv').config();
 const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
@@ -14,15 +14,15 @@ app.use(cors());
 app.use(express.json());
 
 // ====== SNOWFLAKE CONFIGURATION ======
-const SNOWFLAKE_ACCOUNT = "WUQZVQT-DKC22677";
-const SNOWFLAKE_USER = "MALHOTRABHAVYAJOT";
-const SNOWFLAKE_URL = 'https://WUQZVQT-DKC22677.snowflakecomputing.com/api/v2/statements';
-const SNOWFLAKE_ROLE = 'ACCOUNTADMIN';
-const SNOWFLAKE_WAREHOUSE = 'INSURANCEWAREHOUSE';
-const SNOWFLAKE_DATABASE = 'CHATBOT_DEMO';
-const SNOWFLAKE_SCHEMA = 'CHATBOT_METADATA';
-const PRIVATE_KEY_PATH = 'rsa_key.p8';
-const PRIVATE_KEY_PASSPHRASE = 'CeDzue48qiqbzIu';
+const SNOWFLAKE_ACCOUNT = process.env.SNOWFLAKE_ACCOUNT;
+const SNOWFLAKE_USER = process.env.SNOWFLAKE_USER;
+const SNOWFLAKE_URL = process.env.SNOWFLAKE_URL;
+const SNOWFLAKE_ROLE = process.env.SNOWFLAKE_ROLE;
+const SNOWFLAKE_WAREHOUSE = process.env.SNOWFLAKE_WAREHOUSE;
+const SNOWFLAKE_DATABASE = process.env.SNOWFLAKE_DATABASE;
+const SNOWFLAKE_SCHEMA = process.env.SNOWFLAKE_SCHEMA;
+const PRIVATE_KEY_PATH = process.env.PRIVATE_KEY_PATH;
+const PRIVATE_KEY_PASSPHRASE = process.env.PRIVATE_KEY_PASSPHRASE;
 
 // ====== OPENAI CONFIGURATION ======
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -119,14 +119,15 @@ app.post('/api/snowflake', async (req, res) => {
 });
 
 // ====== OPENAI CLARIFY ROUTE (Conversational/Quick-Reply) ======
-const conversationHistories = {}; // e.g., { sessionId1: [ ... ], sessionId2: [ ... ] }
-const sessionId = "default"; // For now, static single-user session
+const conversationHistories = {};
+const sessionId = "default";
 
 app.post('/api/clarify', async (req, res) => {
   try {
     const { userMessage } = req.body;
 
-const systemPrompt = `
+    // ---- Place your (long) systemPrompt string here as before ----
+    const systemPrompt = `
 You are a reporting agent that helps answer reps by reading their reports for a pharmaceutical data analytics chatbot. 
 The queries reps ask are often incomplete, so you help them complete their query by asking for missing information in a conversational, friendly way.
 
