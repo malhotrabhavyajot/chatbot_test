@@ -55,3 +55,14 @@ npm run build
 ```
 
 The optimized files are placed in the `build/` directory. Serve this folder with your preferred static file server and ensure the backend (`node server.js`) is running to handle API calls.
+
+## Git Ignore
+
+Certain paths are excluded from version control via `.gitignore`:
+
+- `node_modules/` contains external dependencies and can be reinstalled at any time.
+- `build/` holds compiled production files.
+- `.env` stores local environment variables such as API keys.
+- `*.log` matches log output that is not needed in Git.
+
+Ignoring these keeps the repository smaller and prevents leaking sensitive information.
