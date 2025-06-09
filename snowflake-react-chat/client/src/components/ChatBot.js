@@ -82,7 +82,7 @@ async function downloadSummaryDocx(messages) {
   let summary = "No summary available.";
   let chartData, chartType, xKey, yKey;
   try {
-    const res = await fetch('https://chatbot-test-qwo8.onrender.com/api/summarize', {
+    const res = await fetch('http://localhost:3000/api/summarize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ history: messages })
@@ -264,7 +264,7 @@ const ChatBot = () => {
     setMessages(updatedMessages);
 
     try {
-      const response = await fetch('https://chatbot-test-qwo8.onrender.com/api/clarify', {
+      const response = await fetch('http://localhost:3000/api/clarify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userMessage })
@@ -281,7 +281,7 @@ const ChatBot = () => {
         }
 
         let body = { statement: `CALL CUSTOM_AGENT2('${finalPrompt.replace(/'/g, "''")}')` };
-        const snowflakeRes = await fetch('https://chatbot-test-qwo8.onrender.com/api/snowflake', {
+        const snowflakeRes = await fetch('http://localhost:3000/api/snowflake', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
