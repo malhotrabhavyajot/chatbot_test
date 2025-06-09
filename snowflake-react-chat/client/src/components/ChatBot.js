@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from "docx";
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ImageRun } from "docx";
 import { saveAs } from "file-saver";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { toPng } from 'html-to-image';
+import ReactDOM from 'react-dom';
 
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
@@ -68,10 +71,24 @@ function getMessageText(msg) {
   return "";
 }
 
-// Enhanced summary-to-docx formatting!
+// --- Chart rendering and embedding for docx --- //
+const ChartForExport = React.forwardRef(({ chartData, xKey, yKey }, ref) => (
+  <div ref={ref} style={{ width: 430, height: 270, background: '#fff' }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={chartData}>
+        <XAxis dataKey={xKey} />
+        <YAxis />
+        <Tooltip />
+        <Bar dataKey={yKey} fill="#7c3aed" />
+      </BarChart>
+    </ResponsiveContainer>
+  </div>
+));
+
+// --- Download Summary as DOCX with Chart Image --- //
 async function downloadSummaryDocx(messages) {
   let summary = "No summary available.";
-  let chartData, chartType;
+  let chartData, chartType, xKey, yKey;
   try {
     const res = await fetch('https://chatbot-test-qwo8.onrender.com/api/summarize', {
       method: 'POST',
@@ -82,6 +99,8 @@ async function downloadSummaryDocx(messages) {
     summary = data.summary || summary;
     chartData = data.chartData;
     chartType = data.chartType;
+    xKey = data.xKey || (chartData && chartData[0] && Object.keys(chartData[0])[0]);
+    yKey = data.yKey || (chartData && chartData[0] && Object.keys(chartData[0])[1]);
   } catch {}
 
   // Docx content block
@@ -95,16 +114,13 @@ async function downloadSummaryDocx(messages) {
   ];
 
   // Parse the summary into sections based on **bold** markers, as in your current summary
-  // E.g., "**Summary:** ... **Recommendation:** ... "
-  // We'll extract sections, make headers bold, and keep values as normal.
-
-  // Split summary by **
-  // E.g. " **Summary:**  - point1 - point2 **Recommendation:** ... "
-  // We'll loop through all bolded sections and output as sections
   const summaryLines = summary.split('**');
   for (let i = 1; i < summaryLines.length; i += 2) {
-    const header = summaryLines[i].replace(/[:：]\s*$/, ""); // Remove trailing colon
+    const header = summaryLines[i].replace(/[:：]\s*$/, "");
     let value = (summaryLines[i + 1] || '').trim();
+
+    // Skip "Recommendation" if chart will be shown
+    if (/recommendation/i.test(header) && chartData && chartData.length > 0 && chartType === "bar") continue;
 
     // If the value is a list, split by dash and render as bullets
     if (/^\s*-\s+/.test(value)) {
@@ -148,7 +164,6 @@ async function downloadSummaryDocx(messages) {
         );
       }
     } else {
-      // Normal section, no bullets
       docChildren.push(
         new Paragraph({
           spacing: { after: 120 },
@@ -161,34 +176,44 @@ async function downloadSummaryDocx(messages) {
     }
   }
 
-  // Add chart/table if present
-  if (chartData && chartData.length > 0 && chartType) {
-    const keys = Object.keys(chartData[0]);
+  // --- Render the actual bar chart as image (if chart data present) ---
+  if (chartData && chartData.length > 0 && chartType === "bar" && xKey && yKey) {
+    // Dynamically create a container to render chart offscreen
+    const chartContainer = document.createElement('div');
+    chartContainer.style.position = "absolute";
+    chartContainer.style.left = "-9999px";
+    chartContainer.style.top = "0";
+    chartContainer.style.width = "430px";
+    chartContainer.style.height = "270px";
+    document.body.appendChild(chartContainer);
+
+    // Render the chart into the container
+    await new Promise(resolve => {
+      ReactDOM.render(
+        <ChartForExport chartData={chartData} xKey={xKey} yKey={yKey} ref={null} />,
+        chartContainer,
+        resolve
+      );
+    });
+
+    // Convert DOM node to PNG
+    const chartImageDataUrl = await toPng(chartContainer);
+
+    // Clean up React component and DOM node
+    ReactDOM.unmountComponentAtNode(chartContainer);
+    document.body.removeChild(chartContainer);
+
+    // Add chart image to docx
     docChildren.push(
-      new Paragraph({ text: "\nRecommended Chart: " + (chartType.toUpperCase()), bold: true, spacing: { after: 120 } }),
-      new Paragraph({ text: "Chart Data:", spacing: { after: 60 } }),
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: [
-          new TableRow({
-            children: keys.map(key =>
-              new TableCell({
-                width: { size: 30, type: WidthType.PERCENTAGE },
-                children: [new Paragraph({ text: key, bold: true })]
-              })
-            )
-          }),
-          ...chartData.map(row =>
-            new TableRow({
-              children: keys.map(key =>
-                new TableCell({
-                  width: { size: 30, type: WidthType.PERCENTAGE },
-                  children: [new Paragraph(String(row[key]))]
-                })
-              )
-            })
-          )
-        ]
+      new Paragraph({ text: "Sales Chart:", spacing: { after: 120 }, bold: true }),
+      new Paragraph({
+        children: [
+          new ImageRun({
+            data: await fetch(chartImageDataUrl).then(r => r.arrayBuffer()),
+            transformation: { width: 430, height: 270 }
+          })
+        ],
+        spacing: { after: 200 }
       })
     );
   }

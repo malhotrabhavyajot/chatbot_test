@@ -12,6 +12,7 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "file-saver": "^2.0.5",
+    "html-to-image": "^1.11.13",
     "jsonwebtoken": "^9.0.2",
     "node-fetch": "^2.7.0",
     "openai": "^5.1.0",
