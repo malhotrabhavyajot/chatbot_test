@@ -17,26 +17,21 @@ const HARDCODED_ANSWERS = {
 function formatSnowflakeResponse(responseText) {
   try {
     let json = typeof responseText === 'string' ? JSON.parse(responseText) : responseText;
+    // Try to detect generic chart-ready backend output
     if (
+      typeof json === "object" &&
+      json &&
       Array.isArray(json.data) &&
       json.data.length > 0 &&
-      Array.isArray(json.data[0]) &&
-      typeof json.data[0][0] === 'string' &&
-      json.data[0][0].trim().startsWith('{')
+      json.chartType &&
+      json.xKey &&
+      json.yKey
     ) {
-      const inner = JSON.parse(json.data[0][0]);
-      if (inner.output) return { type: "output", value: inner.output };
-      return { type: "output", value: JSON.stringify(inner, null, 2) };
+      return { type: "viz", value: json };
     }
+    // Fallback for string output (plain text)
     if (json.output) return { type: "output", value: json.output };
     if (json.error) return { type: "error", value: "❌ Error: " + json.error };
-    if (
-      json.code &&
-      json.code !== "000000" &&
-      (!json.message || !json.message.toLowerCase().includes("executed successfully"))
-    ) {
-      return { type: "error", value: `❌ Error: ${json.code} - ${json.message}` };
-    }
     if (json.message) return { type: "output", value: json.message };
     return { type: "output", value: "No data found." };
   } catch {
@@ -59,14 +54,6 @@ const Tooltip = ({ children, text }) => (
   </span>
 );
 
-function getMessageText(msg) {
-  if (typeof msg.text === "string") return msg.text;
-  if (msg.text && typeof msg.text === "object" && "value" in msg.text)
-    return msg.text.value ?? JSON.stringify(msg.text);
-  if (msg.text != null) return JSON.stringify(msg.text);
-  return "";
-}
-
 // Download only the summary from API, not the full chat
 async function downloadSummaryOnly(messages) {
   let summary = "No summary available.";
@@ -83,16 +70,13 @@ async function downloadSummaryOnly(messages) {
     if (data.chartData && data.chartData.length > 0 && data.chartType) {
       summary += `\n\n---\n**Recommended Chart:** ${data.chartType.toUpperCase()} chart\n`;
       summary += `**Chart Data:**\n`;
-      // Format as a markdown table
       const keys = Object.keys(data.chartData[0]);
       summary += `| ${keys.join(' | ')} |\n|${keys.map(() => '---').join('|')}|\n`;
       data.chartData.forEach(row => {
         summary += `| ${keys.map(k => row[k]).join(' | ')} |\n`;
       });
     }
-  } catch (e) {
-    // keep default
-  }
+  } catch (e) { /* keep default */ }
   const header = "Field Insights Assistant - Chat Summary\n\n";
   const content = header + summary;
   const blob = new Blob([content], { type: "text/plain" });
@@ -118,8 +102,6 @@ const ChatBot = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
   const [isTyping, setIsTyping] = useState(false);
-
-  // State to track which chart visualizations are revealed
   const [revealedCharts, setRevealedCharts] = useState({});
 
   const chatRef = useRef();
@@ -171,7 +153,6 @@ const ChatBot = () => {
       return;
     }
 
-    // Always send message to clarify endpoint
     const updatedMessages = [...messages, { role: 'user', text: userMessage }];
     setMessages(updatedMessages);
 
@@ -202,17 +183,8 @@ const ChatBot = () => {
 
         setIsTyping(false);
 
-        // Parse for visualization
+        // Parse for visualization (uses generic backend schema)
         let formatted = formatSnowflakeResponse(responseText);
-
-        // If backend returns object with data/chartType, pass it through
-        try {
-          const json = JSON.parse(responseText);
-          // If the backend returns visualizable JSON, show it as object
-          if (json && (json.data && json.chartType)) {
-            formatted = { type: "viz", value: json };
-          }
-        } catch { /* fallback to previous */ }
 
         setMessages(prev => [
           ...prev,
@@ -238,89 +210,88 @@ const ChatBot = () => {
 
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  // --- Visualization-aware content rendering ---
-function renderChatBubbleContent(msg, idx) {
-  // If nothing to render
-  if (!msg || msg.text === undefined || msg.text === null) {
-    return <span />;
-  }
+  // ---- Visualization-aware content rendering ----
+  function renderChatBubbleContent(msg, idx) {
+    // If nothing to render
+    if (!msg || msg.text === undefined || msg.text === null) {
+      return <span />;
+    }
 
-  // Visualization candidate
-  if (
-    typeof msg.text === "object" &&
-    msg.text &&
-    msg.text.data &&
-    msg.text.chartType &&
-    Array.isArray(msg.text.data)
-  ) {
-    return (
-      <>
-        <div>
-          {msg.text.summary}
-          {!revealedCharts[idx] && (
-            <button
-              onClick={() => setRevealedCharts(prev => ({ ...prev, [idx]: true }))}
-              style={{
-                marginTop: 16,
-                marginLeft: 0,
-                border: "none",
-                background: "#7c3aed",
-                color: "#fff",
-                borderRadius: 12,
-                padding: "7px 18px",
-                fontWeight: 600,
-                cursor: "pointer",
-                fontSize: 15,
-                boxShadow: "0 1px 8px #a78bfa22"
-              }}
-            >
-              Show visualization
-            </button>
-          )}
-        </div>
-        {revealedCharts[idx] && (
-          <div style={{ marginTop: 14 }}>
-            <ChatSummaryChart
-              chartData={msg.text.data}
-              chartType={msg.text.chartType}
-              labelKey={msg.text.xKey}
-              valueKey={msg.text.yKey}
-            />
+    // Visualization candidate (generic)
+    if (
+      typeof msg.text === "object" &&
+      msg.text &&
+      msg.text.data &&
+      msg.text.chartType &&
+      Array.isArray(msg.text.data)
+    ) {
+      return (
+        <>
+          <div>
+            {msg.text.summary}
+            {!revealedCharts[idx] && (
+              <button
+                onClick={() => setRevealedCharts(prev => ({ ...prev, [idx]: true }))}
+                style={{
+                  marginTop: 16,
+                  marginLeft: 0,
+                  border: "none",
+                  background: "#7c3aed",
+                  color: "#fff",
+                  borderRadius: 12,
+                  padding: "7px 18px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontSize: 15,
+                  boxShadow: "0 1px 8px #a78bfa22"
+                }}
+              >
+                Show visualization
+              </button>
+            )}
           </div>
-        )}
-      </>
-    );
+          {revealedCharts[idx] && (
+            <div style={{ marginTop: 14 }}>
+              <ChatSummaryChart
+                chartData={msg.text.data}
+                chartType={msg.text.chartType}
+                labelKey={msg.text.xKey}
+                valueKey={msg.text.yKey}
+              />
+            </div>
+          )}
+        </>
+      );
+    }
+
+    // Error object from formatSnowflakeResponse
+    if (msg.text && typeof msg.text === "object" && msg.text.type === "error") {
+      return (
+        <span style={{ color: "#b91c1c", fontWeight: 500 }}>
+          {msg.text.value}
+        </span>
+      );
+    }
+
+    // String: split lines
+    if (typeof msg.text === "string") {
+      return msg.text.split('\n').map((line, i) => (
+        <div key={i}>{line}</div>
+      ));
+    }
+
+    // Plain object (JSON), pretty print
+    if (msg.text && typeof msg.text === "object") {
+      return (
+        <pre style={{ margin: 0, fontFamily: "monospace" }}>
+          {JSON.stringify(msg.text, null, 2)}
+        </pre>
+      );
+    }
+
+    // Fallback (covers numbers, booleans, etc.)
+    return <span>{String(msg && msg.text)}</span>;
   }
-
-  // Error object from formatSnowflakeResponse
-  if (msg.text && typeof msg.text === "object" && msg.text.type === "error") {
-    return (
-      <span style={{ color: "#b91c1c", fontWeight: 500 }}>
-        {msg.text.value}
-      </span>
-    );
-  }
-
-  // String: split lines
-  if (typeof msg.text === "string") {
-    return msg.text.split('\n').map((line, i) => (
-      <div key={i}>{line}</div>
-    ));
-  }
-
-  // Plain object (JSON), pretty print
-  if (msg.text && typeof msg.text === "object") {
-    return (
-      <pre style={{ margin: 0, fontFamily: "monospace" }}>
-        {JSON.stringify(msg.text, null, 2)}
-      </pre>
-    );
-  }
-
-  // Fallback (covers numbers, booleans, etc.)
-  return <span>{String(msg && msg.text)}</span>;
-}
-
 
   return (
     <div style={{ background: 'linear-gradient(to bottom right, #f7faff, #e2ecf4)', minHeight: '100vh' }}>
