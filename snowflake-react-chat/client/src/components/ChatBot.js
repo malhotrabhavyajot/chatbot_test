@@ -240,81 +240,57 @@ const ChatBot = () => {
 
   // --- Visualization-aware content rendering ---
   function renderChatBubbleContent(msg, idx) {
-  // Visualization candidate
-  if (
-    typeof msg.text === "object" &&
-    msg.text &&
-    msg.text.data &&
-    msg.text.chartType &&
-    Array.isArray(msg.text.data)
-  ) {
-    return (
-      <>
-        <div>
-          {msg.text.summary}
-          {!revealedCharts[idx] && (
-            <button
-              onClick={() => setRevealedCharts(prev => ({ ...prev, [idx]: true }))}
-              style={{
-                marginTop: 16,
-                marginLeft: 0,
-                border: "none",
-                background: "#7c3aed",
-                color: "#fff",
-                borderRadius: 12,
-                padding: "7px 18px",
-                fontWeight: 600,
-                cursor: "pointer",
-                fontSize: 15,
-                boxShadow: "0 1px 8px #a78bfa22"
-              }}
-            >
-              Show visualization
-            </button>
-          )}
-        </div>
-        {revealedCharts[idx] && (
-          <div style={{ marginTop: 14 }}>
-            <ChatSummaryChart
-              chartData={msg.text.data}
-              chartType={msg.text.chartType}
-              labelKey={msg.text.xKey}
-              valueKey={msg.text.yKey}
-            />
+    // If this is a visualizable response (new agent format)
+    if (
+      typeof msg.text === "object" &&
+      msg.text &&
+      msg.text.data &&
+      msg.text.chartType &&
+      Array.isArray(msg.text.data)
+    ) {
+      return (
+        <>
+          <div>
+            {msg.text.summary}
+            {!revealedCharts[idx] && (
+              <button
+                onClick={() => setRevealedCharts(prev => ({ ...prev, [idx]: true }))}
+                style={{
+                  marginTop: 16,
+                  marginLeft: 0,
+                  border: "none",
+                  background: "#7c3aed",
+                  color: "#fff",
+                  borderRadius: 12,
+                  padding: "7px 18px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontSize: 15,
+                  boxShadow: "0 1px 8px #a78bfa22"
+                }}
+              >
+                Show visualization
+              </button>
+            )}
           </div>
-        )}
-      </>
-    );
-  }
-
-  // If string, split lines
-  if (typeof msg.text === "string") {
-    return msg.text.split('\n').map((line, i) => (
+          {revealedCharts[idx] && (
+            <div style={{ marginTop: 14 }}>
+              <ChatSummaryChart
+                chartData={msg.text.data}
+                chartType={msg.text.chartType}
+                labelKey={msg.text.xKey}
+                valueKey={msg.text.yKey}
+              />
+            </div>
+          )}
+        </>
+      );
+    }
+    // Fallback: plain string/normal output
+    return (msg.text || "").split('\n').map((line, i) => (
       <div key={i}>{line}</div>
     ));
   }
-
-  // If error object
-  if (msg.text && typeof msg.text === "object" && msg.text.type === "error") {
-    return (
-      <span style={{ color: "#b91c1c", fontWeight: 500 }}>
-        {msg.text.value}
-      </span>
-    );
-  }
-
-  // If plain object, show as JSON
-  if (msg.text && typeof msg.text === "object") {
-    return (
-      <pre style={{ margin: 0, fontFamily: "monospace" }}>
-        {JSON.stringify(msg.text, null, 2)}
-      </pre>
-    );
-  }
-
-  // Fallback
-  return <span>{String(msg.text)}</span>;
-}
 
   return (
     <div style={{ background: 'linear-gradient(to bottom right, #f7faff, #e2ecf4)', minHeight: '100vh' }}>
