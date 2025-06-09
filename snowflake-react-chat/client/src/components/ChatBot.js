@@ -3,7 +3,6 @@ import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
 import ReactMarkdown from 'react-markdown';
 
-// --- Hardcoded instant answers
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
   "what is formulary status?": "Formulary Status is the 'MMIT Pharmacy field which shows Preferred/Covered combined with PA/ST Restrictions.",
@@ -15,7 +14,7 @@ const HARDCODED_ANSWERS = {
   "where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier."
 };
 
-// --- Detect finalized prompt message (with quoted text)
+
 function isFinalizedPromptMessage(msg) {
   if (msg.role !== 'assistant' || typeof msg.text !== 'string') return false;
   return /processing this query:\s*\n\s*["“”'](.+?)["“”']\s*\n/i.test(msg.text);
@@ -25,13 +24,9 @@ function extractPromptFromFinalizedMsg(msg) {
   const match = msg.text.match(/processing this query:\s*\n\s*["“”'](.+?)["“”']\s*\n/i);
   return match ? match[1] : '';
 }
-
-// --- Try to detect a Markdown table in assistant output
 function isMarkdownTable(str) {
   return /\|(.+)\|(.+)\n\|([:\-\s|]+)\n([\s\S]*)/.test(str);
 }
-
-// --- Formatting for raw response from Snowflake backend
 function formatSnowflakeResponse(responseText) {
   try {
     let json = typeof responseText === 'string' ? JSON.parse(responseText) : responseText;
@@ -61,7 +56,6 @@ function formatSnowflakeResponse(responseText) {
     return { type: "error", value: responseText || "No response from backend." };
   }
 }
-
 function TypingIndicator() {
   return (
     <span className="typing-indicator">
@@ -69,14 +63,12 @@ function TypingIndicator() {
     </span>
   );
 }
-
 const Tooltip = ({ children, text }) => (
   <span className="feedback-tooltip">
     {children}
     <span className="feedback-tooltiptext">{text}</span>
   </span>
 );
-
 function getMessageText(msg) {
   if (typeof msg.text === "string") return msg.text;
   if (msg.text && typeof msg.text === "object" && "value" in msg.text)
@@ -84,7 +76,6 @@ function getMessageText(msg) {
   if (msg.text != null) return JSON.stringify(msg.text);
   return "";
 }
-
 function downloadChat(messages) {
   const header = "Field Insights Assistant - Chat Conversation\n\n";
   const chatText = messages.map(
@@ -106,7 +97,6 @@ const ChatBot = () => {
     if (saved) return JSON.parse(saved);
     return [{ role: 'assistant', text: 'Hello 👋! How may I assist you?' }];
   });
-
   const [feedback, setFeedback] = useState({});
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -114,11 +104,9 @@ const ChatBot = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
   const [isTyping, setIsTyping] = useState(false);
-
   const chatRef = useRef();
   const inputRef = useRef();
 
-  // Persistent theme
   useEffect(() => {
     const storedTheme = localStorage.getItem('chatbotTheme');
     if (storedTheme) setDarkMode(storedTheme === 'dark');
@@ -126,17 +114,14 @@ const ChatBot = () => {
   useEffect(() => {
     localStorage.setItem('chatbotTheme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
-
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, isTyping, isOpen, isExpanded]);
-
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.scrollLeft = inputRef.current.value.length * 8;
     }
   }, [input]);
-
   useEffect(() => {
     if (toast.visible) {
       const timer = setTimeout(() => {
@@ -145,18 +130,14 @@ const ChatBot = () => {
       return () => clearTimeout(timer);
     }
   }, [toast.visible]);
-
   const showToast = (msg, type) => {
     setToast({ message: msg, type: type, visible: true });
   };
-
-  // Main send logic
   const handleSendMessage = async (userMessage) => {
     if (!userMessage || typeof userMessage !== "string" || !userMessage.trim()) return;
     setInput('');
     setIsTyping(true);
 
-    // HARDCODED ANSWERS (instant, no LLM)
     const cleaned = userMessage.trim().toLowerCase();
     const matchedKey = Object.keys(HARDCODED_ANSWERS).find(k => cleaned.includes(k));
     if (matchedKey) {
@@ -167,7 +148,6 @@ const ChatBot = () => {
       return;
     }
 
-    // Always send message to clarify endpoint
     const updatedMessages = [...messages, { role: 'user', text: userMessage }];
     setMessages(updatedMessages);
 
@@ -184,15 +164,11 @@ const ChatBot = () => {
         setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I couldn't process your query. Please check your network or try again." }]);
         return;
       }
-
       const { assistant_message, finalized } = await response.json();
-
       if (finalized) {
         setMessages(prev => [...prev, { role: 'assistant', text: assistant_message }]);
         setIsTyping(true);
-
         let finalPrompt = extractPromptFromFinalizedMsg({ role: "assistant", text: assistant_message }) || assistant_message;
-
         let body = { statement: `CALL CUSTOM_AGENT2('${finalPrompt.replace(/'/g, "''")}')` };
         const snowflakeRes = await fetch('https://chatbot-test-qwo8.onrender.com/api/snowflake', {
           method: 'POST',
@@ -200,13 +176,11 @@ const ChatBot = () => {
           body: JSON.stringify(body)
         });
         const responseText = await snowflakeRes.text();
-
         setIsTyping(false);
-
         const formatted = formatSnowflakeResponse(responseText);
         setMessages(prev => [
           ...prev,
-          { role: "assistant", text: formatted.value || "No response." }
+          { role: "assistant", text: formatted.value || "No response.", isOutput: true }
         ]);
         return;
       } else {
@@ -226,10 +200,9 @@ const ChatBot = () => {
     setFeedback(prev => ({ ...prev, [idx]: type }));
     showToast(type === "up" ? "Marked as helpful!" : "Marked as not helpful!", type === "up" ? "success" : "error");
   };
-
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  // --- Copy to Clipboard for finalized prompt ---
+  // Copy to Clipboard for finalized prompt
   const handleCopy = useCallback((text) => {
     navigator.clipboard.writeText(text);
     showToast("Copied!", "info");
@@ -237,66 +210,57 @@ const ChatBot = () => {
 
   // --- Main rendering for chat bubbles
   function renderChatBubbleContent(msg, idx) {
-    // Copy button for finalized prompt only
-    if (msg.role === 'assistant' && isFinalizedPromptMessage(msg)) {
-      return (
-        <div style={{ position: "relative" }}>
-          <ReactMarkdown>{getMessageText(msg)}</ReactMarkdown>
-          <button
-            className="header-action-btn"
-            onClick={() => handleCopy(extractPromptFromFinalizedMsg(msg))}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              position: 'absolute',
-              right: 0,
-              top: 0
-            }}
-            title="Copy finalized prompt"
-            aria-label="Copy prompt"
-          >
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-              <rect x="5" y="3" width="10" height="14" rx="2" stroke="#7c3aed" strokeWidth="1.5"/>
-              <rect x="2.5" y="6" width="10" height="11" rx="2" stroke="#bcb8dd" strokeWidth="1"/>
-            </svg>
-          </button>
-        </div>
-      );
-    }
-
-    // Output block for all assistant output (tables, markdown, numbers, errors)
-    if (msg.role === 'assistant' && typeof msg.text === "string") {
-      if (isMarkdownTable(msg.text)) {
-        return (
-          <div className="assistant-output-block">
-            <ReactMarkdown>{msg.text}</ReactMarkdown>
-          </div>
-        );
-      }
+    // 1. Snowflake/assistant data OUTPUT (with purple output block)
+    if (msg.isOutput || (typeof msg.text === "object" && msg.text && msg.text.type === "output")) {
       return (
         <div className="assistant-output-block">
-          <ReactMarkdown>{msg.text}</ReactMarkdown>
+          <ReactMarkdown>{getMessageText(msg)}</ReactMarkdown>
         </div>
       );
     }
 
-    // For objects (output or error)
-    if (typeof msg.text === "object" && msg.text !== null) {
-      if (msg.text.type === "output") {
-        return (
-          <div className="assistant-output-block">
-            <ReactMarkdown>{msg.text.value}</ReactMarkdown>
+    // 2. Finalized prompt with copy button (clarify confirmation)
+    if (msg.role === 'assistant' && isFinalizedPromptMessage(msg)) {
+      return (
+        <div>
+          <ReactMarkdown>{getMessageText(msg)}</ReactMarkdown>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+            <button
+              className="header-action-btn"
+              onClick={() => handleCopy(extractPromptFromFinalizedMsg(msg))}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                marginLeft: 8,
+              }}
+              title="Copy finalized prompt"
+              aria-label="Copy prompt"
+            >
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                <rect x="5" y="3" width="10" height="14" rx="2" stroke="#7c3aed" strokeWidth="1.5"/>
+                <rect x="2.5" y="6" width="10" height="11" rx="2" stroke="#bcb8dd" strokeWidth="1"/>
+              </svg>
+            </button>
           </div>
-        );
-      }
+        </div>
+      );
+    }
+
+    // 3. Assistant normal message (clarification etc.)
+    if (msg.role === 'assistant') {
+      return <ReactMarkdown>{getMessageText(msg)}</ReactMarkdown>;
+    }
+
+    // 4. Errors/objects fallback
+    if (typeof msg.text === "object" && msg.text !== null) {
       if (msg.text.type === "error") {
         return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{msg.text.value}</span>;
       }
       return <pre>{JSON.stringify(msg.text.value, null, 2)}</pre>;
     }
 
-    // User messages (plain text fallback)
+    // 5. User message (plain text fallback)
     return (msg.text || "").split('\n').map((line, i) => (
       <div key={i}>{line}</div>
     ));
@@ -390,9 +354,15 @@ const ChatBot = () => {
               <li
                 key={idx}
                 className={`chat ${msg.role === 'user' ? 'outgoing' : 'incoming'}`}
-                style={{ justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}
+                style={{
+                  justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  background: msg.role === 'user'
+                    ? 'linear-gradient(120deg, #f5eafe 70%, #ede7fa 100%)'
+                    : 'transparent',
+                  borderRadius: '22px',
+                }}
               >
-                <div className={`chat-bubble ${msg.role}`}>
+                <div className={`chat-bubble ${msg.role}${msg.isOutput ? ' output' : ''}`}>
                   {renderChatBubbleContent(msg, idx)}
                 </div>
                 {msg.role === 'assistant' && (

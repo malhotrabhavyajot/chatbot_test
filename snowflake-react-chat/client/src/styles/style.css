@@ -805,3 +805,129 @@ body {
 }
 
 
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap");
+
+/* ...[your existing CSS up to and including the last .assistant-output-block rule]... */
+
+/* --- IMPROVEMENTS/ADDITIONS BELOW --- */
+
+/* Distinct Assistant and User bubble backgrounds (already present, just reinforce) */
+.chat-bubble.user {
+  background: #7c3aed;
+  color: #fff;
+  border-top-right-radius: 24px;
+  align-self: flex-end;
+  border: 1.5px solid #6d2eda;
+}
+
+.chat-bubble.assistant {
+  background: linear-gradient(135deg, #f4f2fc, #ede7fa 95%);
+  color: #23234a;
+  border-top-left-radius: 24px;
+  align-self: flex-start;
+  border: 1.5px solid #ede7fa;
+}
+.dark-mode .chat-bubble.user {
+  background: #a78bfa;
+  color: #181824;
+  border: 1.5px solid #5233c0;
+}
+.dark-mode .chat-bubble.assistant {
+  background: linear-gradient(115deg, #232345, #181824 90%);
+  color: #d4c5fd;
+  border: 1.5px solid #322a4d;
+}
+
+/* Ensure assistant-output-block is visually distinct and scrollable if needed */
+.assistant-output-block {
+  background: #f7f4fd;
+  border-radius: 15px;
+  box-shadow: 0 3px 22px 0 #a78bfa24, 0 1.5px 8px #7c3aed13;
+  padding: 17px 18px 15px 18px;
+  margin: 10px 0 10px 0;
+  color: #3c2a71;
+  border: 1.7px solid #ede7fa;
+  font-size: 15px;
+  font-family: "Poppins", sans-serif;
+  position: relative;
+  overflow-x: auto;
+}
+.dark-mode .assistant-output-block {
+  background: #232345;
+  color: #a78bfa;
+  border: 1.5px solid #322a4d;
+  box-shadow: 0 3px 22px 0 #23234526, 0 1.5px 8px #7c3aed13;
+}
+
+/* Markdown Table Styling in output block */
+.assistant-output-block table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 7px;
+  margin-bottom: 4px;
+  font-size: 0.97em;
+}
+.assistant-output-block th, .assistant-output-block td {
+  border: 1px solid #dad3f2;
+  padding: 7px 11px;
+  text-align: left;
+}
+.assistant-output-block th {
+  background: #ece7fa;
+  color: #3a2c60;
+  font-weight: 600;
+}
+.dark-mode .assistant-output-block th {
+  background: #2e2952;
+  color: #c9b8ff;
+  border: 1.1px solid #484170;
+}
+.dark-mode .assistant-output-block td {
+  border: 1.1px solid #484170;
+}
+.assistant-output-block pre {
+  margin: 0;
+  font-size: 1em;
+  background: transparent;
+  color: inherit;
+  font-family: "Fira Mono", "Menlo", "Monaco", "Consolas", monospace;
+}
+
+/* --- Copy Button for finalized prompt --- */
+.header-action-btn[aria-label="Copy prompt"] {
+  margin-left: 8px !important;
+  margin-top: 4px;
+  float: right;
+  position: relative !important;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  z-index: 3;
+}
+.header-action-btn[aria-label="Copy prompt"]:hover {
+  background: #ede9fe !important;
+}
+
+@media (max-width: 600px) {
+  .assistant-output-block, .chat-bubble.user, .chat-bubble.assistant {
+    font-size: 14px;
+    padding: 11px 10px !important;
+    word-break: break-word;
+  }
+  .header-action-btn[aria-label="Copy prompt"] {
+    margin-right: 0;
+    margin-left: 0;
+    float: none;
+    display: block;
+    margin-top: 4px;
+  }
+}
+
+/* --- Slightly more padding for feedback-row so it doesn't touch copy button --- */
+.feedback-row {
+  margin-top: 12px !important;
+}
+
+/* --- End of improvements --- */

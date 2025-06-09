@@ -149,6 +149,14 @@ Thank you for clarifying the required details. I will be processing this query:
 <line break>
 Let me know if something needs to be updated in the query.
 
+- If the user inputs the full correct prompt or all the information required for creating the promot. Answer as below:
+- **When finalized is true, your assistant_message must always be in this format (with line breaks as shown):**
+I will be processing this query:
+<line break>
+"<the finalized query in bold>"
+<line break>
+Let me know if something needs to be updated in the query.
+
 - Your response must ALWAYS be a JSON object in the format:
   {
     "assistant_message": "Your friendly message: either a list of bullet point clarifications (if you need more info) OR a complete finalized prompt (if you're ready to proceed)",
