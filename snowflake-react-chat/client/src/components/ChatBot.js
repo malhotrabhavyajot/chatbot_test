@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
-import ReactMarkdown from 'react-markdown';
+import ChatSummaryChart from './ChatSummaryChart'; // <-- You'll create this file next!
 
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
@@ -14,19 +14,6 @@ const HARDCODED_ANSWERS = {
   "where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier."
 };
 
-
-function isFinalizedPromptMessage(msg) {
-  if (msg.role !== 'assistant' || typeof msg.text !== 'string') return false;
-  return /processing this query:\s*\n\s*["“”'](.+?)["“”']\s*\n/i.test(msg.text);
-}
-function extractPromptFromFinalizedMsg(msg) {
-  if (!isFinalizedPromptMessage(msg)) return '';
-  const match = msg.text.match(/processing this query:\s*\n\s*["“”'](.+?)["“”']\s*\n/i);
-  return match ? match[1] : '';
-}
-function isMarkdownTable(str) {
-  return /\|(.+)\|(.+)\n\|([:\-\s|]+)\n([\s\S]*)/.test(str);
-}
 function formatSnowflakeResponse(responseText) {
   try {
     let json = typeof responseText === 'string' ? JSON.parse(responseText) : responseText;
@@ -56,6 +43,7 @@ function formatSnowflakeResponse(responseText) {
     return { type: "error", value: responseText || "No response from backend." };
   }
 }
+
 function TypingIndicator() {
   return (
     <span className="typing-indicator">
@@ -63,12 +51,14 @@ function TypingIndicator() {
     </span>
   );
 }
+
 const Tooltip = ({ children, text }) => (
   <span className="feedback-tooltip">
     {children}
     <span className="feedback-tooltiptext">{text}</span>
   </span>
 );
+
 function getMessageText(msg) {
   if (typeof msg.text === "string") return msg.text;
   if (msg.text && typeof msg.text === "object" && "value" in msg.text)
@@ -76,6 +66,7 @@ function getMessageText(msg) {
   if (msg.text != null) return JSON.stringify(msg.text);
   return "";
 }
+
 function downloadChat(messages) {
   const header = "Field Insights Assistant - Chat Conversation\n\n";
   const chatText = messages.map(
@@ -97,6 +88,7 @@ const ChatBot = () => {
     if (saved) return JSON.parse(saved);
     return [{ role: 'assistant', text: 'Hello 👋! How may I assist you?' }];
   });
+
   const [feedback, setFeedback] = useState({});
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -104,24 +96,20 @@ const ChatBot = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
   const [isTyping, setIsTyping] = useState(false);
+
   const chatRef = useRef();
   const inputRef = useRef();
 
   useEffect(() => {
-    const storedTheme = localStorage.getItem('chatbotTheme');
-    if (storedTheme) setDarkMode(storedTheme === 'dark');
-  }, []);
-  useEffect(() => {
-    localStorage.setItem('chatbotTheme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
-  useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, isTyping, isOpen, isExpanded]);
+
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.scrollLeft = inputRef.current.value.length * 8;
     }
   }, [input]);
+
   useEffect(() => {
     if (toast.visible) {
       const timer = setTimeout(() => {
@@ -130,14 +118,18 @@ const ChatBot = () => {
       return () => clearTimeout(timer);
     }
   }, [toast.visible]);
+
   const showToast = (msg, type) => {
     setToast({ message: msg, type: type, visible: true });
   };
+
+  // ----------- MAIN LOGIC ----------------
   const handleSendMessage = async (userMessage) => {
     if (!userMessage || typeof userMessage !== "string" || !userMessage.trim()) return;
     setInput('');
     setIsTyping(true);
 
+    // HARDCODED ANSWERS (instant, no LLM)
     const cleaned = userMessage.trim().toLowerCase();
     const matchedKey = Object.keys(HARDCODED_ANSWERS).find(k => cleaned.includes(k));
     if (matchedKey) {
@@ -148,39 +140,49 @@ const ChatBot = () => {
       return;
     }
 
+    // Summarize command (recognize variants)
+    if (/summarize( the)? chat|give me a summary|chat summary/i.test(userMessage.trim())) {
+      await handleSummarize();
+      return;
+    }
+
+    // Always send message to clarify endpoint
     const updatedMessages = [...messages, { role: 'user', text: userMessage }];
     setMessages(updatedMessages);
 
     try {
-      const response = await fetch('https://chatbot-test-qwo8.onrender.com/api/clarify', {
+      const response = await fetch('/api/clarify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userMessage })
       });
-
-      if (!response.ok) {
-        showToast("Network error! Please try again.", "error");
-        setIsTyping(false);
-        setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I couldn't process your query. Please check your network or try again." }]);
-        return;
-      }
       const { assistant_message, finalized } = await response.json();
+
       if (finalized) {
+        // ✅ Show the final OpenAI prompt as an ASSISTANT message (left side)
         setMessages(prev => [...prev, { role: 'assistant', text: assistant_message }]);
         setIsTyping(true);
-        let finalPrompt = extractPromptFromFinalizedMsg({ role: "assistant", text: assistant_message }) || assistant_message;
+
+        let finalPrompt = assistant_message;
+        if (typeof finalPrompt === "string" && /^["“”'].*["“”']$/.test(finalPrompt.trim())) {
+          finalPrompt = finalPrompt.trim().replace(/^["“”']|["“”']$/g, "");
+        }
+
         let body = { statement: `CALL CUSTOM_AGENT2('${finalPrompt.replace(/'/g, "''")}')` };
-        const snowflakeRes = await fetch('https://chatbot-test-qwo8.onrender.com/api/snowflake', {
+        const snowflakeRes = await fetch('/api/snowflake', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
         });
         const responseText = await snowflakeRes.text();
+
         setIsTyping(false);
+
+        // Only show "output" from response
         const formatted = formatSnowflakeResponse(responseText);
         setMessages(prev => [
           ...prev,
-          { role: "assistant", text: formatted.value || "No response.", isOutput: true }
+          { role: "assistant", text: formatted.value || "No response." }
         ]);
         return;
       } else {
@@ -189,10 +191,43 @@ const ChatBot = () => {
         return;
       }
     } catch (error) {
-      showToast("Network error! Please try again.", "error");
       setIsTyping(false);
-      setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I couldn't process your query. Please check your network or try again." }]);
+      setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I couldn't process your query. Please try again." }]);
       return;
+    }
+  };
+
+  // ----------- SUMMARIZE LOGIC ---------------
+  const handleSummarize = async () => {
+    setIsTyping(true);
+    try {
+      const res = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ history: messages })
+      });
+      const data = await res.json();
+      setIsTyping(false);
+
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: "📝 Chat Summary:\n" + (data.summary || "Sorry, no summary available."),
+          isSummary: true,
+          chartData: data.chartData,
+          chartType: data.chartType,
+          chartLabelKey: data.chartLabelKey,
+          chartValueKey: data.chartValueKey,
+          chartTitle: data.chartTitle
+        }
+      ]);
+    } catch {
+      setIsTyping(false);
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', text: "Sorry, I could not generate a summary." }
+      ]);
     }
   };
 
@@ -200,71 +235,47 @@ const ChatBot = () => {
     setFeedback(prev => ({ ...prev, [idx]: type }));
     showToast(type === "up" ? "Marked as helpful!" : "Marked as not helpful!", type === "up" ? "success" : "error");
   };
+
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  // Copy to Clipboard for finalized prompt
-  const handleCopy = useCallback((text) => {
-    navigator.clipboard.writeText(text);
-    showToast("Copied!", "info");
-  }, []);
-
-  // --- Main rendering for chat bubbles
-  function renderChatBubbleContent(msg, idx) {
-    // 1. Snowflake/assistant data OUTPUT (with purple output block)
-    if (msg.isOutput || (typeof msg.text === "object" && msg.text && msg.text.type === "output")) {
+  // Renders normal/summary/chat output bubbles
+  const renderChatBubbleContent = (msg) => {
+    // Beautiful summary with chart if present
+    if (msg.isSummary) {
       return (
-        <div className="assistant-output-block">
-          <ReactMarkdown>{getMessageText(msg)}</ReactMarkdown>
-        </div>
-      );
-    }
-
-    // 2. Finalized prompt with copy button (clarify confirmation)
-    if (msg.role === 'assistant' && isFinalizedPromptMessage(msg)) {
-      return (
-        <div>
-          <ReactMarkdown>{getMessageText(msg)}</ReactMarkdown>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-            <button
-              className="header-action-btn"
-              onClick={() => handleCopy(extractPromptFromFinalizedMsg(msg))}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                marginLeft: 8,
-              }}
-              title="Copy finalized prompt"
-              aria-label="Copy prompt"
-            >
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-                <rect x="5" y="3" width="10" height="14" rx="2" stroke="#7c3aed" strokeWidth="1.5"/>
-                <rect x="2.5" y="6" width="10" height="11" rx="2" stroke="#bcb8dd" strokeWidth="1"/>
-              </svg>
-            </button>
+        <div style={{ width: '100%', minWidth: 0 }}>
+          <div style={{ fontWeight: 600, color: "#7c3aed", marginBottom: 7 }}>
+            <span role="img" aria-label="summary">📝</span> Summary
           </div>
+          <div style={{ whiteSpace: "pre-wrap", fontSize: 15, marginBottom: msg.chartData ? 10 : 0 }}>
+            {msg.text}
+          </div>
+          {msg.chartData && Array.isArray(msg.chartData) && (
+            <div style={{ background: "#f7f4fd", borderRadius: 12, padding: 16, margin: "10px 0 2px 0" }}>
+              <div style={{ fontWeight: 500, marginBottom: 8, color: "#5233c0" }}>
+                {msg.chartTitle || "Chart"}
+              </div>
+              <ChatSummaryChart
+                chartData={msg.chartData}
+                chartType={msg.chartType}
+                labelKey={msg.chartLabelKey}
+                valueKey={msg.chartValueKey}
+              />
+            </div>
+          )}
         </div>
       );
     }
-
-    // 3. Assistant normal message (clarification etc.)
-    if (msg.role === 'assistant') {
-      return <ReactMarkdown>{getMessageText(msg)}</ReactMarkdown>;
-    }
-
-    // 4. Errors/objects fallback
+    // Standard output
     if (typeof msg.text === "object" && msg.text !== null) {
-      if (msg.text.type === "error") {
-        return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{msg.text.value}</span>;
-      }
+      if (msg.text.type === "output") return <div>{msg.text.value}</div>;
+      if (msg.text.type === "error") return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{msg.text.value}</span>;
       return <pre>{JSON.stringify(msg.text.value, null, 2)}</pre>;
     }
-
-    // 5. User message (plain text fallback)
     return (msg.text || "").split('\n').map((line, i) => (
       <div key={i}>{line}</div>
     ));
-  }
+  };
 
   return (
     <div style={{ background: 'linear-gradient(to bottom right, #f7faff, #e2ecf4)', minHeight: '100vh' }}>
@@ -346,6 +357,16 @@ const ChatBot = () => {
                     </svg>
                   )}
                 </button>
+                <button
+                  onClick={handleSummarize}
+                  title="Summarize chat"
+                  className="header-action-btn"
+                  aria-label="Summarize chat"
+                >
+                  <svg width="23" height="23" fill="none" stroke="#7c3aed" strokeWidth="2" viewBox="0 0 24 24">
+                    <path d="M6 4v16M6 4h8a2 2 0 012 2v12a2 2 0 01-2 2H6M10 9h4M10 13h4" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
               </div>
             </div>
           </header>
@@ -354,16 +375,10 @@ const ChatBot = () => {
               <li
                 key={idx}
                 className={`chat ${msg.role === 'user' ? 'outgoing' : 'incoming'}`}
-                style={{
-                  justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                  background: msg.role === 'user'
-                    ? 'linear-gradient(120deg, #f5eafe 70%, #ede7fa 100%)'
-                    : 'transparent',
-                  borderRadius: '22px',
-                }}
+                style={{ justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}
               >
-                <div className={`chat-bubble ${msg.role}${msg.isOutput ? ' output' : ''}`}>
-                  {renderChatBubbleContent(msg, idx)}
+                <div className={`chat-bubble ${msg.role}`}>
+                  {renderChatBubbleContent(msg)}
                 </div>
                 {msg.role === 'assistant' && (
                   <div className="feedback-row">
@@ -440,57 +455,43 @@ const ChatBot = () => {
               </svg>
             </button>
           </div>
-          <footer
-            className="chatbot-footer"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              position: "relative",
-              width: "100%",
-              minHeight: "40px",
-              padding: "8px 0",
-            }}
-          >
-            {/* Download button absolutely positioned at left */}
-            <button
-              onClick={() => downloadChat(messages)}
-              title="Download conversation"
-              className="header-action-btn"
-              aria-label="Download chat"
-              style={{
-                position: "absolute",
-                left: 0,
-                top: "45%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                padding: "0 0 0 12px",
-                height: "100%",
-                display: "flex",
-                alignItems: "center"
-              }}
-            >
-              <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
-                <path d="M12 16v-8M12 16l-4-4M12 16l4-4M4 20h16" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-          </footer>
-          {toast.visible && (
-            <div
-              className={`toast toast-${toast.type}`}
-              style={{
-                position: "absolute",
-                left: "50%",
-                bottom: "74px",
-                transform: "translateX(-50%)",
-                zIndex: 99
-              }}
-            >
-              {toast.message}
-            </div>
-          )}
+<footer
+  className="chatbot-footer"
+  style={{
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    width: "100%",
+    minHeight: "40px",
+    padding: "8px 0",
+  }}
+>
+  {/* Download button absolutely positioned at left */}
+  <button
+    onClick={() => downloadChat(messages)}
+    title="Download conversation"
+    className="header-action-btn"
+    aria-label="Download chat"
+    style={{
+      position: "absolute",
+      left: 0,
+      top: "45%",
+      transform: "translateY(-50%)",
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      padding: "0 0 0 12px",
+      height: "100%",
+      display: "flex",
+      alignItems: "center"
+    }}
+  >
+    <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+      <path d="M12 16v-8M12 16l-4-4M12 16l4-4M4 20h16" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  </button>
+</footer>
         </div>
       )}
     </div>
