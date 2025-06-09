@@ -68,7 +68,7 @@ function getMessageText(msg) {
   return "";
 }
 
-// Download only the summary from API, and generate a .docx Word file
+// Enhanced summary-to-docx formatting!
 async function downloadSummaryDocx(messages) {
   let summary = "No summary available.";
   let chartData, chartType;
@@ -84,23 +84,89 @@ async function downloadSummaryDocx(messages) {
     chartType = data.chartType;
   } catch {}
 
-  // Build .docx
+  // Docx content block
   const docChildren = [
     new Paragraph({
       children: [
-        new TextRun({ text: "Field Insights Assistant - Chat Summary", bold: true, size: 28 }),
-        new TextRun({ text: "\n\n" }),
+        new TextRun({ text: "Field Insights Assistant - Chat Summary", bold: true, size: 36 }),
+        new TextRun({ text: "\n" }),
       ]
     }),
-    new Paragraph({ text: summary }),
   ];
 
+  // Parse the summary into sections based on **bold** markers, as in your current summary
+  // E.g., "**Summary:** ... **Recommendation:** ... "
+  // We'll extract sections, make headers bold, and keep values as normal.
+
+  // Split summary by **
+  // E.g. " **Summary:**  - point1 - point2 **Recommendation:** ... "
+  // We'll loop through all bolded sections and output as sections
+  const summaryLines = summary.split('**');
+  for (let i = 1; i < summaryLines.length; i += 2) {
+    const header = summaryLines[i].replace(/[:：]\s*$/, ""); // Remove trailing colon
+    let value = (summaryLines[i + 1] || '').trim();
+
+    // If the value is a list, split by dash and render as bullets
+    if (/^\s*-\s+/.test(value)) {
+      const bulletLines = value.split('\n').filter(line => line.trim().startsWith('- '));
+      if (bulletLines.length > 0) {
+        docChildren.push(
+          new Paragraph({
+            spacing: { after: 100 },
+            children: [new TextRun({ text: header + ":", bold: true, size: 26 })]
+          })
+        );
+        bulletLines.forEach(line => {
+          docChildren.push(
+            new Paragraph({
+              bullet: { level: 0 },
+              spacing: { after: 60 },
+              children: [new TextRun({ text: line.replace(/^\s*-\s+/, '') })]
+            })
+          );
+        });
+        // If any non-bullet text remains, add it as a paragraph
+        const nonBullets = value.split('\n').filter(line => !line.trim().startsWith('- ')).join(' ').trim();
+        if (nonBullets) {
+          docChildren.push(
+            new Paragraph({
+              spacing: { after: 120 },
+              children: [new TextRun({ text: nonBullets })]
+            })
+          );
+        }
+      } else {
+        // Just output value as paragraph
+        docChildren.push(
+          new Paragraph({
+            spacing: { after: 120 },
+            children: [
+              new TextRun({ text: header + ":", bold: true, size: 26 }),
+              new TextRun({ text: " " + value })
+            ]
+          })
+        );
+      }
+    } else {
+      // Normal section, no bullets
+      docChildren.push(
+        new Paragraph({
+          spacing: { after: 120 },
+          children: [
+            new TextRun({ text: header + ":", bold: true, size: 26 }),
+            new TextRun({ text: " " + value })
+          ]
+        })
+      );
+    }
+  }
+
+  // Add chart/table if present
   if (chartData && chartData.length > 0 && chartType) {
-    // Table header
     const keys = Object.keys(chartData[0]);
     docChildren.push(
-      new Paragraph({ text: "\nRecommended Chart: " + (chartType.toUpperCase()), bold: true }),
-      new Paragraph({ text: "\nChart Data:" }),
+      new Paragraph({ text: "\nRecommended Chart: " + (chartType.toUpperCase()), bold: true, spacing: { after: 120 } }),
+      new Paragraph({ text: "Chart Data:", spacing: { after: 60 } }),
       new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
         rows: [
