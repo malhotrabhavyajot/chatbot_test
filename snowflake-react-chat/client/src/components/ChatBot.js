@@ -64,17 +64,9 @@ const Tooltip = ({ children, text }) => (
   </span>
 );
 
-// function getMessageText(msg) {
-//   if (typeof msg.text === "string") return msg.text;
-//   if (msg.text && typeof msg.text === "object" && "value" in msg.text)
-//     return msg.text.value ?? JSON.stringify(msg.text);
-//   if (msg.text != null) return JSON.stringify(msg.text);
-//   return "";
-// }
-
-// --- Chart rendering and embedding for docx --- //
-const ChartForExport = React.forwardRef(({ chartData, xKey, yKey }, ref) => (
-  <div ref={ref} style={{ width: 430, height: 270, background: '#fff' }}>
+// Chart for export as PNG image (offscreen)
+const ChartForExport = ({ chartData, xKey, yKey }) => (
+  <div style={{ width: 430, height: 270, background: '#fff' }}>
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={chartData}>
         <XAxis dataKey={xKey} />
@@ -84,9 +76,8 @@ const ChartForExport = React.forwardRef(({ chartData, xKey, yKey }, ref) => (
       </BarChart>
     </ResponsiveContainer>
   </div>
-));
+);
 
-// --- Download Summary as DOCX with Chart Image --- //
 async function downloadSummaryDocx(messages) {
   let summary = "No summary available.";
   let chartData, chartType, xKey, yKey;
@@ -104,12 +95,10 @@ async function downloadSummaryDocx(messages) {
     yKey = data.yKey || (chartData && chartData[0] && Object.keys(chartData[0])[1]);
   } catch {}
 
-  // Remove "Recommendation" section if chart is present
+  // Remove Recommendation if chart is present
   let summaryToParse = summary;
   if (chartData && chartData.length > 0 && chartType === "bar") {
-    // Remove "**Recommendation:** ... (to end or until next **)" from the summary string
-    summaryToParse = summaryToParse.replace(/\*\*Recommendation\*\*:(.|\s)*$/i, '').trim();
-    summaryToParse = summaryToParse.replace(/\*\*Recommendation\*\*:[^*]*/i, '').trim();
+    summaryToParse = summaryToParse.replace(/Recommendation:[\s\S]*/i, '').trim();
   }
 
   const docChildren = [
@@ -121,61 +110,41 @@ async function downloadSummaryDocx(messages) {
     }),
   ];
 
-  // Split summary and output as formatted sections
-  const summaryLines = summaryToParse.split('**');
-  for (let i = 1; i < summaryLines.length; i += 2) {
-    const header = summaryLines[i].replace(/[:：]\s*$/, "");
-    let value = (summaryLines[i + 1] || '').trim();
-
-    // If the value is a list, split by dash and render as bullets
-    if (/^\s*-\s+/.test(value)) {
-      const bulletLines = value.split('\n').filter(line => line.trim().startsWith('- '));
-      if (bulletLines.length > 0) {
-        docChildren.push(
-          new Paragraph({
-            spacing: { after: 100 },
-            children: [new TextRun({ text: header + ":", bold: true, size: 26 })]
-          })
-        );
-        bulletLines.forEach(line => {
-          docChildren.push(
-            new Paragraph({
-              bullet: { level: 0 },
-              spacing: { after: 60 },
-              children: [new TextRun({ text: line.replace(/^\s*-\s+/, '') })]
-            })
-          );
-        });
-        const nonBullets = value.split('\n').filter(line => !line.trim().startsWith('- ')).join(' ').trim();
-        if (nonBullets) {
-          docChildren.push(
-            new Paragraph({
-              spacing: { after: 120 },
-              children: [new TextRun({ text: nonBullets })]
-            })
-          );
-        }
-      } else {
-        docChildren.push(
-          new Paragraph({
-            spacing: { after: 120 },
-            children: [
-              new TextRun({ text: header + ":", bold: true, size: 26 }),
-              new TextRun({ text: " " + value })
-            ]
-          })
-        );
-      }
-    } else {
+  // Bullet/section formatting:
+  const sectionRegex = /(Request for .+:|Data Provided:|Recommendation:)/g;
+  const sections = summaryToParse.split(sectionRegex).filter(s => s.trim());
+  for (let i = 0; i < sections.length; i++) {
+    if (/^(Request for .+:|Data Provided:|Recommendation:)/.test(sections[i])) {
+      // Section header
       docChildren.push(
         new Paragraph({
-          spacing: { after: 120 },
-          children: [
-            new TextRun({ text: header + ":", bold: true, size: 26 }),
-            new TextRun({ text: " " + value })
-          ]
+          spacing: { after: 60 },
+          children: [new TextRun({ text: sections[i].replace(":", ""), bold: true, size: 28 })]
         })
       );
+      // Section content (the next element)
+      if (sections[i + 1]) {
+        const lines = sections[i + 1].split('\n').map(l => l.trim()).filter(Boolean);
+        lines.forEach(line => {
+          if (line.startsWith("●")) {
+            docChildren.push(
+              new Paragraph({
+                bullet: { level: 0 },
+                spacing: { after: 40 },
+                children: [new TextRun({ text: line.replace(/^●\s*/, '') })]
+              })
+            );
+          } else if (line) {
+            docChildren.push(
+              new Paragraph({
+                spacing: { after: 40 },
+                children: [new TextRun({ text: line })]
+              })
+            );
+          }
+        });
+      }
+      i++; // Skip content
     }
   }
 
@@ -192,29 +161,36 @@ async function downloadSummaryDocx(messages) {
 
     await new Promise(resolve => {
       ReactDOM.render(
-        <ChartForExport chartData={chartData} xKey={xKey} yKey={yKey} ref={null} />,
+        <ChartForExport chartData={chartData} xKey={xKey} yKey={yKey} />,
         chartContainer,
         resolve
       );
     });
 
-    const chartImageDataUrl = await toPng(chartContainer);
+    await new Promise(r => setTimeout(r, 100));
+
+    let chartImageDataUrl = null;
+    try {
+      chartImageDataUrl = await toPng(chartContainer);
+    } catch (e) {}
 
     ReactDOM.unmountComponentAtNode(chartContainer);
     document.body.removeChild(chartContainer);
 
-    docChildren.push(
-      new Paragraph({ text: "Sales Chart:", spacing: { after: 120 }, bold: true }),
-      new Paragraph({
-        children: [
-          new ImageRun({
-            data: await fetch(chartImageDataUrl).then(r => r.arrayBuffer()),
-            transformation: { width: 430, height: 270 }
-          })
-        ],
-        spacing: { after: 200 }
-      })
-    );
+    if (chartImageDataUrl) {
+      docChildren.push(
+        new Paragraph({ text: "Sales Chart:", spacing: { after: 120 }, bold: true }),
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: await fetch(chartImageDataUrl).then(r => r.arrayBuffer()),
+              transformation: { width: 430, height: 270 }
+            })
+          ],
+          spacing: { after: 200 }
+        })
+      );
+    }
   }
 
   const doc = new Document({
