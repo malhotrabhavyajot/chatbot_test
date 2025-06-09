@@ -12,9 +12,23 @@ const { OpenAI } = require('openai');
 const app = express();
 
 // CORS: Restrict in production, open for dev
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'https://chatbot-test-1-wi2q.onrender.com' // <-- add any deployed URLs you need!
+];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000'
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true); // allow server-to-server, curl, etc.
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  }
 }));
+
 
 app.use(express.json());
 
@@ -481,7 +495,7 @@ Summary:
     });
 
     const summary = summaryResponse.choices[0].message.content.trim();
-
+console.log(chartData, chartType, chartLabelKey, chartValueKey)
     return res.json({
       summary,
       chartData,
