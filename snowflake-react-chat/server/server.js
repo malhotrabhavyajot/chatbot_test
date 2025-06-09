@@ -380,7 +380,7 @@ Here is the user query:
 
   } catch (err) {
     console.error("Error in /api/clarify:", err);
-    return res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error dvsfvs" });
   }
 });
 
