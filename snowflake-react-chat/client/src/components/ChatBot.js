@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
-// import ZSIcon from '../assets/ZS_Associates.png';
+import ReactMarkdown from 'react-markdown';
 
+// Hardcoded instant answers
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
   "what is formulary status?": "Formulary Status is the 'MMIT Pharmacy field which shows Preferred/Covered combined with PA/ST Restrictions.",
@@ -13,6 +14,19 @@ const HARDCODED_ANSWERS = {
   "which universes do we show in accounts calculation?": "We show three universes Veeva Aligned, Call Plan/DMCP and a combined Veeva Aligned + Call Plan/DMCP universes.",
   "where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier."
 };
+
+// Helper: Identify "finalized" assistant message (prompt message with quoted text)
+function isFinalizedPromptMessage(msg) {
+  if (msg.role !== 'assistant' || typeof msg.text !== 'string') return false;
+  // Look for prompt pattern between quotes after 'processing this query:'
+  return /processing this query:\s*\n\s*["“”'](.+?)["“”']\s*\n/i.test(msg.text);
+}
+// Helper: Extract the prompt between quotes from the finalized assistant message
+function extractPromptFromFinalizedMsg(msg) {
+  if (!isFinalizedPromptMessage(msg)) return '';
+  const match = msg.text.match(/processing this query:\s*\n\s*["“”'](.+?)["“”']\s*\n/i);
+  return match ? match[1] : '';
+}
 
 function formatSnowflakeResponse(responseText) {
   try {
@@ -100,6 +114,15 @@ const ChatBot = () => {
   const chatRef = useRef();
   const inputRef = useRef();
 
+  // --- Persistent Theme ---
+  useEffect(() => {
+    const storedTheme = localStorage.getItem('chatbotTheme');
+    if (storedTheme) setDarkMode(storedTheme === 'dark');
+  }, []);
+  useEffect(() => {
+    localStorage.setItem('chatbotTheme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
+
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, isTyping, isOpen, isExpanded]);
@@ -150,17 +173,21 @@ const ChatBot = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userMessage })
       });
+
+      if (!response.ok) {
+        showToast("Network error! Please try again.", "error");
+        setIsTyping(false);
+        setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I couldn't process your query. Please check your network or try again." }]);
+        return;
+      }
+
       const { assistant_message, finalized } = await response.json();
 
       if (finalized) {
-        // ✅ Show the final OpenAI prompt as an ASSISTANT message (left side)
         setMessages(prev => [...prev, { role: 'assistant', text: assistant_message }]);
         setIsTyping(true);
 
-        let finalPrompt = assistant_message;
-        if (typeof finalPrompt === "string" && /^["“”'].*["“”']$/.test(finalPrompt.trim())) {
-          finalPrompt = finalPrompt.trim().replace(/^["“”']|["“”']$/g, "");
-        }
+        let finalPrompt = extractPromptFromFinalizedMsg({ role: "assistant", text: assistant_message }) || assistant_message;
 
         let body = { statement: `CALL CUSTOM_AGENT2('${finalPrompt.replace(/'/g, "''")}')` };
         const snowflakeRes = await fetch('https://chatbot-test-qwo8.onrender.com/api/snowflake', {
@@ -172,7 +199,6 @@ const ChatBot = () => {
 
         setIsTyping(false);
 
-        // Only show "output" from response
         const formatted = formatSnowflakeResponse(responseText);
         setMessages(prev => [
           ...prev,
@@ -185,8 +211,9 @@ const ChatBot = () => {
         return;
       }
     } catch (error) {
+      showToast("Network error! Please try again.", "error");
       setIsTyping(false);
-      setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I couldn't process your query. Please try again." }]);
+      setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I couldn't process your query. Please check your network or try again." }]);
       return;
     }
   };
@@ -198,7 +225,43 @@ const ChatBot = () => {
 
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  const renderChatBubbleContent = (msg) => {
+  // ---- Copy to Clipboard ----
+  const handleCopy = useCallback((text) => {
+    navigator.clipboard.writeText(text);
+    showToast("Copied!", "info");
+  }, []);
+
+  // --- Chat message bubble rendering, with finalized message copy logic ---
+  const renderChatBubbleContent = (msg, idx) => {
+    if (msg.role === 'assistant' && isFinalizedPromptMessage(msg)) {
+      return (
+        <div style={{ position: "relative" }}>
+          <ReactMarkdown>{getMessageText(msg)}</ReactMarkdown>
+          <button
+            className="header-action-btn"
+            onClick={() => handleCopy(extractPromptFromFinalizedMsg(msg))}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              position: 'absolute',
+              right: 0,
+              top: 0
+            }}
+            title="Copy finalized prompt"
+            aria-label="Copy prompt"
+          >
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+              <rect x="5" y="3" width="10" height="14" rx="2" stroke="#7c3aed" strokeWidth="1.5"/>
+              <rect x="2.5" y="6" width="10" height="11" rx="2" stroke="#bcb8dd" strokeWidth="1"/>
+            </svg>
+          </button>
+        </div>
+      );
+    }
+    if (msg.role === 'assistant') {
+      return <ReactMarkdown>{getMessageText(msg)}</ReactMarkdown>;
+    }
     if (typeof msg.text === "object" && msg.text !== null) {
       if (msg.text.type === "output") return <div>{msg.text.value}</div>;
       if (msg.text.type === "error") return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{msg.text.value}</span>;
@@ -300,7 +363,7 @@ const ChatBot = () => {
                 style={{ justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}
               >
                 <div className={`chat-bubble ${msg.role}`}>
-                  {renderChatBubbleContent(msg)}
+                  {renderChatBubbleContent(msg, idx)}
                 </div>
                 {msg.role === 'assistant' && (
                   <div className="feedback-row">
@@ -377,43 +440,57 @@ const ChatBot = () => {
               </svg>
             </button>
           </div>
-<footer
-  className="chatbot-footer"
-  style={{
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-    width: "100%",
-    minHeight: "40px",
-    padding: "8px 0",
-  }}
->
-  {/* Download button absolutely positioned at left */}
-  <button
-    onClick={() => downloadChat(messages)}
-    title="Download conversation"
-    className="header-action-btn"
-    aria-label="Download chat"
-    style={{
-      position: "absolute",
-      left: 0,
-      top: "45%",
-      transform: "translateY(-50%)",
-      background: "none",
-      border: "none",
-      cursor: "pointer",
-      padding: "0 0 0 12px",
-      height: "100%",
-      display: "flex",
-      alignItems: "center"
-    }}
-  >
-    <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
-      <path d="M12 16v-8M12 16l-4-4M12 16l4-4M4 20h16" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  </button>
-</footer>
+          <footer
+            className="chatbot-footer"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative",
+              width: "100%",
+              minHeight: "40px",
+              padding: "8px 0",
+            }}
+          >
+            {/* Download button absolutely positioned at left */}
+            <button
+              onClick={() => downloadChat(messages)}
+              title="Download conversation"
+              className="header-action-btn"
+              aria-label="Download chat"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: "45%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "0 0 0 12px",
+                height: "100%",
+                display: "flex",
+                alignItems: "center"
+              }}
+            >
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+                <path d="M12 16v-8M12 16l-4-4M12 16l4-4M4 20h16" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </footer>
+          {toast.visible && (
+            <div
+              className={`toast toast-${toast.type}`}
+              style={{
+                position: "absolute",
+                left: "50%",
+                bottom: "74px",
+                transform: "translateX(-50%)",
+                zIndex: 99
+              }}
+            >
+              {toast.message}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -421,5 +498,3 @@ const ChatBot = () => {
 };
 
 export default ChatBot;
-
-//  <span style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>Powered by <img src={ZSIcon} alt="ZS Associates" style={{ marginLeft: 5, height: 25 }} /> </span>
