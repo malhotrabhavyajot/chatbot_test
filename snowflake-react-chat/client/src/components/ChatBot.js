@@ -3,7 +3,7 @@ import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
 import ReactMarkdown from 'react-markdown';
 
-// Hardcoded instant answers
+// --- Hardcoded instant answers
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
   "what is formulary status?": "Formulary Status is the 'MMIT Pharmacy field which shows Preferred/Covered combined with PA/ST Restrictions.",
@@ -15,19 +15,23 @@ const HARDCODED_ANSWERS = {
   "where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier."
 };
 
-// Helper: Identify "finalized" assistant message (prompt message with quoted text)
+// --- Detect finalized prompt message (with quoted text)
 function isFinalizedPromptMessage(msg) {
   if (msg.role !== 'assistant' || typeof msg.text !== 'string') return false;
-  // Look for prompt pattern between quotes after 'processing this query:'
   return /processing this query:\s*\n\s*["“”'](.+?)["“”']\s*\n/i.test(msg.text);
 }
-// Helper: Extract the prompt between quotes from the finalized assistant message
 function extractPromptFromFinalizedMsg(msg) {
   if (!isFinalizedPromptMessage(msg)) return '';
   const match = msg.text.match(/processing this query:\s*\n\s*["“”'](.+?)["“”']\s*\n/i);
   return match ? match[1] : '';
 }
 
+// --- Try to detect a Markdown table in assistant output
+function isMarkdownTable(str) {
+  return /\|(.+)\|(.+)\n\|([:\-\s|]+)\n([\s\S]*)/.test(str);
+}
+
+// --- Formatting for raw response from Snowflake backend
 function formatSnowflakeResponse(responseText) {
   try {
     let json = typeof responseText === 'string' ? JSON.parse(responseText) : responseText;
@@ -114,7 +118,7 @@ const ChatBot = () => {
   const chatRef = useRef();
   const inputRef = useRef();
 
-  // --- Persistent Theme ---
+  // Persistent theme
   useEffect(() => {
     const storedTheme = localStorage.getItem('chatbotTheme');
     if (storedTheme) setDarkMode(storedTheme === 'dark');
@@ -146,7 +150,7 @@ const ChatBot = () => {
     setToast({ message: msg, type: type, visible: true });
   };
 
-  // ----------- MAIN LOGIC ----------------
+  // Main send logic
   const handleSendMessage = async (userMessage) => {
     if (!userMessage || typeof userMessage !== "string" || !userMessage.trim()) return;
     setInput('');
@@ -225,14 +229,15 @@ const ChatBot = () => {
 
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  // ---- Copy to Clipboard ----
+  // --- Copy to Clipboard for finalized prompt ---
   const handleCopy = useCallback((text) => {
     navigator.clipboard.writeText(text);
     showToast("Copied!", "info");
   }, []);
 
-  // --- Chat message bubble rendering, with finalized message copy logic ---
-  const renderChatBubbleContent = (msg, idx) => {
+  // --- Main rendering for chat bubbles
+  function renderChatBubbleContent(msg, idx) {
+    // Copy button for finalized prompt only
     if (msg.role === 'assistant' && isFinalizedPromptMessage(msg)) {
       return (
         <div style={{ position: "relative" }}>
@@ -259,18 +264,43 @@ const ChatBot = () => {
         </div>
       );
     }
-    if (msg.role === 'assistant') {
-      return <ReactMarkdown>{getMessageText(msg)}</ReactMarkdown>;
+
+    // Output block for all assistant output (tables, markdown, numbers, errors)
+    if (msg.role === 'assistant' && typeof msg.text === "string") {
+      if (isMarkdownTable(msg.text)) {
+        return (
+          <div className="assistant-output-block">
+            <ReactMarkdown>{msg.text}</ReactMarkdown>
+          </div>
+        );
+      }
+      return (
+        <div className="assistant-output-block">
+          <ReactMarkdown>{msg.text}</ReactMarkdown>
+        </div>
+      );
     }
+
+    // For objects (output or error)
     if (typeof msg.text === "object" && msg.text !== null) {
-      if (msg.text.type === "output") return <div>{msg.text.value}</div>;
-      if (msg.text.type === "error") return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{msg.text.value}</span>;
+      if (msg.text.type === "output") {
+        return (
+          <div className="assistant-output-block">
+            <ReactMarkdown>{msg.text.value}</ReactMarkdown>
+          </div>
+        );
+      }
+      if (msg.text.type === "error") {
+        return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{msg.text.value}</span>;
+      }
       return <pre>{JSON.stringify(msg.text.value, null, 2)}</pre>;
     }
+
+    // User messages (plain text fallback)
     return (msg.text || "").split('\n').map((line, i) => (
       <div key={i}>{line}</div>
     ));
-  };
+  }
 
   return (
     <div style={{ background: 'linear-gradient(to bottom right, #f7faff, #e2ecf4)', minHeight: '100vh' }}>
