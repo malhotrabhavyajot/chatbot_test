@@ -785,4 +785,23 @@ body {
 }
 
 
+.assistant-output-block {
+  background: #f7f4fd;
+  border-radius: 15px;
+  box-shadow: 0 3px 22px 0 #a78bfa24, 0 1.5px 8px #7c3aed13;
+  padding: 17px 18px 15px 18px;
+  margin: 8px 0 8px 0;
+  color: #3c2a71;
+  border: 1.7px solid #ede7fa;
+  font-size: 15px;
+  font-family: "Poppins", sans-serif;
+  position: relative;
+}
+.dark-mode .assistant-output-block {
+  background: #232345;
+  color: #a78bfa;
+  border: 1.5px solid #322a4d;
+  box-shadow: 0 3px 22px 0 #23234526, 0 1.5px 8px #7c3aed13;
+}
+
 
