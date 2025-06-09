@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
-import ChatSummaryChart from './ChatSummaryChart'; // <-- You'll create this file next!
+// import ChatSummaryChart from './ChatSummaryChart'; // Keep or remove if not using chart display in summary
 
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
@@ -67,16 +67,26 @@ function getMessageText(msg) {
   return "";
 }
 
-function downloadChat(messages) {
-  const header = "Field Insights Assistant - Chat Conversation\n\n";
-  const chatText = messages.map(
-    (msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${getMessageText(msg)}`
-  ).join('\n\n');
-  const content = header + chatText;
+// Download only the summary from API, not the full chat
+async function downloadSummaryOnly(messages) {
+  let summary = "No summary available.";
+  try {
+    const res = await fetch('/api/summarize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history: messages })
+    });
+    const data = await res.json();
+    summary = data.summary || summary;
+  } catch (e) {
+    // keep default
+  }
+  const header = "Field Insights Assistant - Chat Summary\n\n";
+  const content = header + summary;
   const blob = new Blob([content], { type: "text/plain" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `chat-session-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.txt`;
+  link.download = `chat-summary-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.txt`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -140,9 +150,9 @@ const ChatBot = () => {
       return;
     }
 
-    // Summarize command (recognize variants)
+    // Summarize commands should be ignored in chat (do nothing)
     if (/summarize( the)? chat|give me a summary|chat summary/i.test(userMessage.trim())) {
-      await handleSummarize();
+      setIsTyping(false);
       return;
     }
 
@@ -159,7 +169,6 @@ const ChatBot = () => {
       const { assistant_message, finalized } = await response.json();
 
       if (finalized) {
-        // ✅ Show the final OpenAI prompt as an ASSISTANT message (left side)
         setMessages(prev => [...prev, { role: 'assistant', text: assistant_message }]);
         setIsTyping(true);
 
@@ -178,7 +187,6 @@ const ChatBot = () => {
 
         setIsTyping(false);
 
-        // Only show "output" from response
         const formatted = formatSnowflakeResponse(responseText);
         setMessages(prev => [
           ...prev,
@@ -197,40 +205,6 @@ const ChatBot = () => {
     }
   };
 
-  // ----------- SUMMARIZE LOGIC ---------------
-  const handleSummarize = async () => {
-    setIsTyping(true);
-    try {
-      const res = await fetch('/api/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: messages })
-      });
-      const data = await res.json();
-      setIsTyping(false);
-
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          text: "📝 Chat Summary:\n" + (data.summary || "Sorry, no summary available."),
-          isSummary: true,
-          chartData: data.chartData,
-          chartType: data.chartType,
-          chartLabelKey: data.chartLabelKey,
-          chartValueKey: data.chartValueKey,
-          chartTitle: data.chartTitle
-        }
-      ]);
-    } catch {
-      setIsTyping(false);
-      setMessages(prev => [
-        ...prev,
-        { role: 'assistant', text: "Sorry, I could not generate a summary." }
-      ]);
-    }
-  };
-
   const handleFeedback = (idx, type) => {
     setFeedback(prev => ({ ...prev, [idx]: type }));
     showToast(type === "up" ? "Marked as helpful!" : "Marked as not helpful!", type === "up" ? "success" : "error");
@@ -238,35 +212,7 @@ const ChatBot = () => {
 
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  // Renders normal/summary/chat output bubbles
   const renderChatBubbleContent = (msg) => {
-    // Beautiful summary with chart if present
-    if (msg.isSummary) {
-      return (
-        <div style={{ width: '100%', minWidth: 0 }}>
-          <div style={{ fontWeight: 600, color: "#7c3aed", marginBottom: 7 }}>
-            <span role="img" aria-label="summary">📝</span> Summary
-          </div>
-          <div style={{ whiteSpace: "pre-wrap", fontSize: 15, marginBottom: msg.chartData ? 10 : 0 }}>
-            {msg.text}
-          </div>
-          {msg.chartData && Array.isArray(msg.chartData) && (
-            <div style={{ background: "#f7f4fd", borderRadius: 12, padding: 16, margin: "10px 0 2px 0" }}>
-              <div style={{ fontWeight: 500, marginBottom: 8, color: "#5233c0" }}>
-                {msg.chartTitle || "Chart"}
-              </div>
-              <ChatSummaryChart
-                chartData={msg.chartData}
-                chartType={msg.chartType}
-                labelKey={msg.chartLabelKey}
-                valueKey={msg.chartValueKey}
-              />
-            </div>
-          )}
-        </div>
-      );
-    }
-    // Standard output
     if (typeof msg.text === "object" && msg.text !== null) {
       if (msg.text.type === "output") return <div>{msg.text.value}</div>;
       if (msg.text.type === "error") return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{msg.text.value}</span>;
@@ -357,16 +303,7 @@ const ChatBot = () => {
                     </svg>
                   )}
                 </button>
-                <button
-                  onClick={handleSummarize}
-                  title="Summarize chat"
-                  className="header-action-btn"
-                  aria-label="Summarize chat"
-                >
-                  <svg width="23" height="23" fill="none" stroke="#7c3aed" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M6 4v16M6 4h8a2 2 0 012 2v12a2 2 0 01-2 2H6M10 9h4M10 13h4" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
+                {/* Summary button REMOVED */}
               </div>
             </div>
           </header>
@@ -469,10 +406,10 @@ const ChatBot = () => {
 >
   {/* Download button absolutely positioned at left */}
   <button
-    onClick={() => downloadChat(messages)}
-    title="Download conversation"
+    onClick={() => downloadSummaryOnly(messages)}
+    title="Download summary"
     className="header-action-btn"
-    aria-label="Download chat"
+    aria-label="Download summary"
     style={{
       position: "absolute",
       left: 0,
