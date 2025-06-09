@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, ImageRun } from "docx";
+import { Document, Packer, Paragraph, TextRun, ImageRun } from "docx";
 import { saveAs } from "file-saver";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { toPng } from 'html-to-image';
 import ReactDOM from 'react-dom';
 
@@ -56,6 +56,7 @@ function TypingIndicator() {
   );
 }
 
+// Only one Tooltip!
 const Tooltip = ({ children, text }) => (
   <span className="feedback-tooltip">
     {children}
@@ -63,13 +64,13 @@ const Tooltip = ({ children, text }) => (
   </span>
 );
 
-function getMessageText(msg) {
-  if (typeof msg.text === "string") return msg.text;
-  if (msg.text && typeof msg.text === "object" && "value" in msg.text)
-    return msg.text.value ?? JSON.stringify(msg.text);
-  if (msg.text != null) return JSON.stringify(msg.text);
-  return "";
-}
+// function getMessageText(msg) {
+//   if (typeof msg.text === "string") return msg.text;
+//   if (msg.text && typeof msg.text === "object" && "value" in msg.text)
+//     return msg.text.value ?? JSON.stringify(msg.text);
+//   if (msg.text != null) return JSON.stringify(msg.text);
+//   return "";
+// }
 
 // --- Chart rendering and embedding for docx --- //
 const ChartForExport = React.forwardRef(({ chartData, xKey, yKey }, ref) => (
@@ -78,7 +79,7 @@ const ChartForExport = React.forwardRef(({ chartData, xKey, yKey }, ref) => (
       <BarChart data={chartData}>
         <XAxis dataKey={xKey} />
         <YAxis />
-        <Tooltip />
+        <RechartsTooltip />
         <Bar dataKey={yKey} fill="#7c3aed" />
       </BarChart>
     </ResponsiveContainer>
@@ -103,7 +104,14 @@ async function downloadSummaryDocx(messages) {
     yKey = data.yKey || (chartData && chartData[0] && Object.keys(chartData[0])[1]);
   } catch {}
 
-  // Docx content block
+  // Remove "Recommendation" section if chart is present
+  let summaryToParse = summary;
+  if (chartData && chartData.length > 0 && chartType === "bar") {
+    // Remove "**Recommendation:** ... (to end or until next **)" from the summary string
+    summaryToParse = summaryToParse.replace(/\*\*Recommendation\*\*:(.|\s)*$/i, '').trim();
+    summaryToParse = summaryToParse.replace(/\*\*Recommendation\*\*:[^*]*/i, '').trim();
+  }
+
   const docChildren = [
     new Paragraph({
       children: [
@@ -113,14 +121,11 @@ async function downloadSummaryDocx(messages) {
     }),
   ];
 
-  // Parse the summary into sections based on **bold** markers, as in your current summary
-  const summaryLines = summary.split('**');
+  // Split summary and output as formatted sections
+  const summaryLines = summaryToParse.split('**');
   for (let i = 1; i < summaryLines.length; i += 2) {
     const header = summaryLines[i].replace(/[:：]\s*$/, "");
     let value = (summaryLines[i + 1] || '').trim();
-
-    // Skip "Recommendation" if chart will be shown
-    if (/recommendation/i.test(header) && chartData && chartData.length > 0 && chartType === "bar") continue;
 
     // If the value is a list, split by dash and render as bullets
     if (/^\s*-\s+/.test(value)) {
@@ -141,7 +146,6 @@ async function downloadSummaryDocx(messages) {
             })
           );
         });
-        // If any non-bullet text remains, add it as a paragraph
         const nonBullets = value.split('\n').filter(line => !line.trim().startsWith('- ')).join(' ').trim();
         if (nonBullets) {
           docChildren.push(
@@ -152,7 +156,6 @@ async function downloadSummaryDocx(messages) {
           );
         }
       } else {
-        // Just output value as paragraph
         docChildren.push(
           new Paragraph({
             spacing: { after: 120 },
@@ -176,9 +179,9 @@ async function downloadSummaryDocx(messages) {
     }
   }
 
-  // --- Render the actual bar chart as image (if chart data present) ---
+  // --- Render chart as image if chart data present ---
   if (chartData && chartData.length > 0 && chartType === "bar" && xKey && yKey) {
-    // Dynamically create a container to render chart offscreen
+    // Render the chart offscreen
     const chartContainer = document.createElement('div');
     chartContainer.style.position = "absolute";
     chartContainer.style.left = "-9999px";
@@ -187,7 +190,6 @@ async function downloadSummaryDocx(messages) {
     chartContainer.style.height = "270px";
     document.body.appendChild(chartContainer);
 
-    // Render the chart into the container
     await new Promise(resolve => {
       ReactDOM.render(
         <ChartForExport chartData={chartData} xKey={xKey} yKey={yKey} ref={null} />,
@@ -196,14 +198,11 @@ async function downloadSummaryDocx(messages) {
       );
     });
 
-    // Convert DOM node to PNG
     const chartImageDataUrl = await toPng(chartContainer);
 
-    // Clean up React component and DOM node
     ReactDOM.unmountComponentAtNode(chartContainer);
     document.body.removeChild(chartContainer);
 
-    // Add chart image to docx
     docChildren.push(
       new Paragraph({ text: "Sales Chart:", spacing: { after: 120 }, bold: true }),
       new Paragraph({
