@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
-import ChatSummaryChart from './ChatSummaryChart';
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType } from "docx";
+import { saveAs } from "file-saver";
 
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
@@ -67,9 +68,10 @@ function getMessageText(msg) {
   return "";
 }
 
-// Download only the summary from API, not the full chat
-async function downloadSummaryOnly(messages) {
+// Download only the summary from API, and generate a .docx Word file
+async function downloadSummaryDocx(messages) {
   let summary = "No summary available.";
+  let chartData, chartType;
   try {
     const res = await fetch('https://chatbot-test-qwo8.onrender.com/api/summarize', {
       method: 'POST',
@@ -78,30 +80,59 @@ async function downloadSummaryOnly(messages) {
     });
     const data = await res.json();
     summary = data.summary || summary;
+    chartData = data.chartData;
+    chartType = data.chartType;
+  } catch {}
 
-    // If there is chart info, add a simple markdown visualization note to the file
-    if (data.chartData && data.chartData.length > 0 && data.chartType) {
-      summary += `\n\n---\n**Recommended Chart:** ${data.chartType.toUpperCase()} chart\n`;
-      summary += `**Chart Data:**\n`;
-      // Format as a markdown table
-      const keys = Object.keys(data.chartData[0]);
-      summary += `| ${keys.join(' | ')} |\n|${keys.map(() => '---').join('|')}|\n`;
-      data.chartData.forEach(row => {
-        summary += `| ${keys.map(k => row[k]).join(' | ')} |\n`;
-      });
-    }
-  } catch (e) {
-    // keep default
+  // Build .docx
+  const docChildren = [
+    new Paragraph({
+      children: [
+        new TextRun({ text: "Field Insights Assistant - Chat Summary", bold: true, size: 28 }),
+        new TextRun({ text: "\n\n" }),
+      ]
+    }),
+    new Paragraph({ text: summary }),
+  ];
+
+  if (chartData && chartData.length > 0 && chartType) {
+    // Table header
+    const keys = Object.keys(chartData[0]);
+    docChildren.push(
+      new Paragraph({ text: "\nRecommended Chart: " + (chartType.toUpperCase()), bold: true }),
+      new Paragraph({ text: "\nChart Data:" }),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: keys.map(key =>
+              new TableCell({
+                width: { size: 30, type: WidthType.PERCENTAGE },
+                children: [new Paragraph({ text: key, bold: true })]
+              })
+            )
+          }),
+          ...chartData.map(row =>
+            new TableRow({
+              children: keys.map(key =>
+                new TableCell({
+                  width: { size: 30, type: WidthType.PERCENTAGE },
+                  children: [new Paragraph(String(row[key]))]
+                })
+              )
+            })
+          )
+        ]
+      })
+    );
   }
-  const header = "Field Insights Assistant - Chat Summary\n\n";
-  const content = header + summary;
-  const blob = new Blob([content], { type: "text/plain" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `chat-summary-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.txt`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+
+  const doc = new Document({
+    sections: [{ properties: {}, children: docChildren }]
+  });
+
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, `chat-summary-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.docx`);
 }
 
 const ChatBot = () => {
@@ -118,9 +149,6 @@ const ChatBot = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
   const [isTyping, setIsTyping] = useState(false);
-
-  // State to track which chart visualizations are revealed
-  const [revealedCharts, setRevealedCharts] = useState({});
 
   const chatRef = useRef();
   const inputRef = useRef();
@@ -165,12 +193,6 @@ const ChatBot = () => {
       return;
     }
 
-    // Summarize commands should be ignored in chat (do nothing)
-    if (/summarize( the)? chat|give me a summary|chat summary/i.test(userMessage.trim())) {
-      setIsTyping(false);
-      return;
-    }
-
     // Always send message to clarify endpoint
     const updatedMessages = [...messages, { role: 'user', text: userMessage }];
     setMessages(updatedMessages);
@@ -202,21 +224,11 @@ const ChatBot = () => {
 
         setIsTyping(false);
 
-        // Parse for visualization
-        let formatted = formatSnowflakeResponse(responseText);
-
-        // If backend returns object with data/chartType, pass it through
-        try {
-          const json = JSON.parse(responseText);
-          // If the backend returns visualizable JSON, show it as object
-          if (json && (json.data && json.chartType)) {
-            formatted = { type: "viz", value: json };
-          }
-        } catch { /* fallback to previous */ }
-
+        // Only show "output" from response
+        const formatted = formatSnowflakeResponse(responseText);
         setMessages(prev => [
           ...prev,
-          { role: "assistant", text: formatted.type === "viz" ? formatted.value : formatted.value || "No response." }
+          { role: "assistant", text: formatted.value || "No response." }
         ]);
         return;
       } else {
@@ -238,89 +250,16 @@ const ChatBot = () => {
 
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  // --- Visualization-aware content rendering ---
-function renderChatBubbleContent(msg, idx) {
-  // If nothing to render
-  if (!msg || msg.text === undefined || msg.text === null) {
-    return <span />;
-  }
-
-  // Visualization candidate
-  if (
-    typeof msg.text === "object" &&
-    msg.text &&
-    msg.text.data &&
-    msg.text.chartType &&
-    Array.isArray(msg.text.data)
-  ) {
-    return (
-      <>
-        <div>
-          {msg.text.summary}
-          {!revealedCharts[idx] && (
-            <button
-              onClick={() => setRevealedCharts(prev => ({ ...prev, [idx]: true }))}
-              style={{
-                marginTop: 16,
-                marginLeft: 0,
-                border: "none",
-                background: "#7c3aed",
-                color: "#fff",
-                borderRadius: 12,
-                padding: "7px 18px",
-                fontWeight: 600,
-                cursor: "pointer",
-                fontSize: 15,
-                boxShadow: "0 1px 8px #a78bfa22"
-              }}
-            >
-              Show visualization
-            </button>
-          )}
-        </div>
-        {revealedCharts[idx] && (
-          <div style={{ marginTop: 14 }}>
-            <ChatSummaryChart
-              chartData={msg.text.data}
-              chartType={msg.text.chartType}
-              labelKey={msg.text.xKey}
-              valueKey={msg.text.yKey}
-            />
-          </div>
-        )}
-      </>
-    );
-  }
-
-  // Error object from formatSnowflakeResponse
-  if (msg.text && typeof msg.text === "object" && msg.text.type === "error") {
-    return (
-      <span style={{ color: "#b91c1c", fontWeight: 500 }}>
-        {msg.text.value}
-      </span>
-    );
-  }
-
-  // String: split lines
-  if (typeof msg.text === "string") {
-    return msg.text.split('\n').map((line, i) => (
+  const renderChatBubbleContent = (msg) => {
+    if (typeof msg.text === "object" && msg.text !== null) {
+      if (msg.text.type === "output") return <div>{msg.text.value}</div>;
+      if (msg.text.type === "error") return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{msg.text.value}</span>;
+      return <pre>{JSON.stringify(msg.text.value, null, 2)}</pre>;
+    }
+    return (msg.text || "").split('\n').map((line, i) => (
       <div key={i}>{line}</div>
     ));
-  }
-
-  // Plain object (JSON), pretty print
-  if (msg.text && typeof msg.text === "object") {
-    return (
-      <pre style={{ margin: 0, fontFamily: "monospace" }}>
-        {JSON.stringify(msg.text, null, 2)}
-      </pre>
-    );
-  }
-
-  // Fallback (covers numbers, booleans, etc.)
-  return <span>{String(msg && msg.text)}</span>;
-}
-
+  };
 
   return (
     <div style={{ background: 'linear-gradient(to bottom right, #f7faff, #e2ecf4)', minHeight: '100vh' }}>
@@ -371,7 +310,6 @@ function renderChatBubbleContent(msg, idx) {
                     setMessages([{ role: 'assistant', text: 'Hello 👋! How may I assist you?' }]);
                     localStorage.removeItem('chatMessages');
                     setFeedback({});
-                    setRevealedCharts({});
                   }}
                   title="Clear chat"
                   className="header-action-btn"
@@ -414,7 +352,7 @@ function renderChatBubbleContent(msg, idx) {
                 style={{ justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}
               >
                 <div className={`chat-bubble ${msg.role}`}>
-                  {renderChatBubbleContent(msg, idx)}
+                  {renderChatBubbleContent(msg)}
                 </div>
                 {msg.role === 'assistant' && (
                   <div className="feedback-row">
@@ -505,7 +443,7 @@ function renderChatBubbleContent(msg, idx) {
 >
   {/* Download button absolutely positioned at left */}
   <button
-    onClick={() => downloadSummaryOnly(messages)}
+    onClick={() => downloadSummaryDocx(messages)}
     title="Download summary"
     className="header-action-btn"
     aria-label="Download summary"
