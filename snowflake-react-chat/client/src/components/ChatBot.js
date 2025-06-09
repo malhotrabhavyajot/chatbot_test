@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
-// import ChatSummaryChart from './ChatSummaryChart'; // Keep or remove if not using chart display in summary
+import ChatSummaryChart from './ChatSummaryChart'; // Keep or remove if not using chart display in summary
 
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
@@ -71,7 +71,7 @@ function getMessageText(msg) {
 async function downloadSummaryOnly(messages) {
   let summary = "No summary available.";
   try {
-    const res = await fetch('/api/summarize', {
+    const res = await fetch('https://chatbot-test-qwo8.onrender.com/api/summarize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ history: messages })
@@ -161,7 +161,7 @@ const ChatBot = () => {
     setMessages(updatedMessages);
 
     try {
-      const response = await fetch('/api/clarify', {
+      const response = await fetch('https://chatbot-test-qwo8.onrender.com/api/clarify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userMessage })
@@ -178,7 +178,7 @@ const ChatBot = () => {
         }
 
         let body = { statement: `CALL CUSTOM_AGENT2('${finalPrompt.replace(/'/g, "''")}')` };
-        const snowflakeRes = await fetch('/api/snowflake', {
+        const snowflakeRes = await fetch('https://chatbot-test-qwo8.onrender.com/api/snowflake', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
