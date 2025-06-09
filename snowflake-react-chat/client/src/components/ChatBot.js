@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
-import ChatSummaryChart from './ChatSummaryChart'; // Keep or remove if not using chart display in summary
+import ChatSummaryChart from './ChatSummaryChart';
 
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
@@ -107,6 +107,9 @@ const ChatBot = () => {
   const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
   const [isTyping, setIsTyping] = useState(false);
 
+  // --- ADDED: state for summary/chart ---
+  const [summaryResult, setSummaryResult] = useState(null);
+
   const chatRef = useRef();
   const inputRef = useRef();
 
@@ -156,7 +159,6 @@ const ChatBot = () => {
       return;
     }
 
-    // Always send message to clarify endpoint
     const updatedMessages = [...messages, { role: 'user', text: userMessage }];
     setMessages(updatedMessages);
 
@@ -211,6 +213,22 @@ const ChatBot = () => {
   };
 
   const toggleTheme = () => setDarkMode(prev => !prev);
+
+  // --- ADD: fetch summary for current chat ---
+  async function fetchSummary(messages) {
+    setSummaryResult(null);
+    try {
+      const res = await fetch('https://chatbot-test-qwo8.onrender.com/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ history: messages })
+      });
+      const data = await res.json();
+      setSummaryResult(data);
+    } catch {
+      setSummaryResult({ summary: "Could not generate summary." });
+    }
+  }
 
   const renderChatBubbleContent = (msg) => {
     if (typeof msg.text === "object" && msg.text !== null) {
@@ -272,6 +290,7 @@ const ChatBot = () => {
                     setMessages([{ role: 'assistant', text: 'Hello 👋! How may I assist you?' }]);
                     localStorage.removeItem('chatMessages');
                     setFeedback({});
+                    setSummaryResult(null);
                   }}
                   title="Clear chat"
                   className="header-action-btn"
@@ -303,7 +322,18 @@ const ChatBot = () => {
                     </svg>
                   )}
                 </button>
-                {/* Summary button REMOVED */}
+                {/* --- NEW: Show summary/chart button --- */}
+                <button
+                  onClick={() => fetchSummary(messages)}
+                  title="Show chat summary"
+                  className="header-action-btn"
+                  aria-label="Show summary"
+                >
+                  <svg width="25" height="25" fill="none" viewBox="0 0 24 24">
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="#7c3aed" strokeWidth="2" />
+                  </svg>
+                </button>
+                {/* --- END NEW --- */}
               </div>
             </div>
           </header>
@@ -361,6 +391,34 @@ const ChatBot = () => {
               </li>
             )}
           </ul>
+          {/* --- NEW: Summary and Chart display below chat --- */}
+          {summaryResult && (
+            <div className="assistant-output-block" style={{ margin: '0 0 12px 0', position: "relative" }}>
+              <button
+                className="header-action-btn"
+                aria-label="Hide summary"
+                title="Hide summary"
+                onClick={() => setSummaryResult(null)}
+                style={{ position: "absolute", right: 8, top: 8, background: "none", border: "none", zIndex: 2 }}
+              >
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+                  <path d="M6 18L18 6M6 6l12 12" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+              <div style={{ paddingRight: 32 }}>
+                <div dangerouslySetInnerHTML={{ __html: summaryResult.summary.replace(/\n/g, "<br/>") }} />
+                {summaryResult.chartData && summaryResult.chartData.length > 0 && (
+                  <ChatSummaryChart
+                    chartData={summaryResult.chartData}
+                    chartType={summaryResult.chartType}
+                    labelKey={summaryResult.chartLabelKey}
+                    valueKey={summaryResult.chartValueKey}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+          {/* --- END NEW --- */}
           <div className="chat-input">
             <textarea
               ref={inputRef}
