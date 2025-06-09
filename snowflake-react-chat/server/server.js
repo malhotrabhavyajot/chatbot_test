@@ -150,7 +150,7 @@ Thank you for clarifying the required details. I will be processing this query:
 Let me know if something needs to be updated in the query.
 
 - If the user inputs the full correct prompt or all the information required for creating the promot. Answer as below:
-- **When finalized is true, your assistant_message must always be in this format (with line breaks as shown):**
+- **When finalized is true, your assistant_message must always be in this format (with line breaks as shown). Rephrase it as required:**
 I will be processing this query:
 <line break>
 "<the finalized query in bold>"
