@@ -14,10 +14,10 @@ const HARDCODED_ANSWERS = {
   "where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier."
 };
 
+// Parse backend output for chart or fallback to text
 function formatSnowflakeResponse(responseText) {
   try {
     let json = typeof responseText === 'string' ? JSON.parse(responseText) : responseText;
-    // Try to detect generic chart-ready backend output
     if (
       typeof json === "object" &&
       json &&
@@ -29,7 +29,6 @@ function formatSnowflakeResponse(responseText) {
     ) {
       return { type: "viz", value: json };
     }
-    // Fallback for string output (plain text)
     if (json.output) return { type: "output", value: json.output };
     if (json.error) return { type: "error", value: "❌ Error: " + json.error };
     if (json.message) return { type: "output", value: json.message };
@@ -54,7 +53,6 @@ const Tooltip = ({ children, text }) => (
   </span>
 );
 
-// Download only the summary from API, not the full chat
 async function downloadSummaryOnly(messages) {
   let summary = "No summary available.";
   try {
@@ -66,7 +64,6 @@ async function downloadSummaryOnly(messages) {
     const data = await res.json();
     summary = data.summary || summary;
 
-    // If there is chart info, add a simple markdown visualization note to the file
     if (data.chartData && data.chartData.length > 0 && data.chartType) {
       summary += `\n\n---\n**Recommended Chart:** ${data.chartType.toUpperCase()} chart\n`;
       summary += `**Chart Data:**\n`;
@@ -136,7 +133,6 @@ const ChatBot = () => {
     setInput('');
     setIsTyping(true);
 
-    // HARDCODED ANSWERS (instant, no LLM)
     const cleaned = userMessage.trim().toLowerCase();
     const matchedKey = Object.keys(HARDCODED_ANSWERS).find(k => cleaned.includes(k));
     if (matchedKey) {
@@ -147,7 +143,6 @@ const ChatBot = () => {
       return;
     }
 
-    // Summarize commands should be ignored in chat (do nothing)
     if (/summarize( the)? chat|give me a summary|chat summary/i.test(userMessage.trim())) {
       setIsTyping(false);
       return;
@@ -183,7 +178,6 @@ const ChatBot = () => {
 
         setIsTyping(false);
 
-        // Parse for visualization (uses generic backend schema)
         let formatted = formatSnowflakeResponse(responseText);
 
         setMessages(prev => [
@@ -210,14 +204,11 @@ const ChatBot = () => {
 
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  // ---- Visualization-aware content rendering ----
   function renderChatBubbleContent(msg, idx) {
-    // If nothing to render
-    if (!msg || msg.text === undefined || msg.text === null) {
-      return <span />;
-    }
+    // Nothing to render
+    if (!msg || msg.text === undefined || msg.text === null) return <span />;
 
-    // Visualization candidate (generic)
+    // Visualization
     if (
       typeof msg.text === "object" &&
       msg.text &&
@@ -264,7 +255,7 @@ const ChatBot = () => {
       );
     }
 
-    // Error object from formatSnowflakeResponse
+    // Error object
     if (msg.text && typeof msg.text === "object" && msg.text.type === "error") {
       return (
         <span style={{ color: "#b91c1c", fontWeight: 500 }}>
@@ -280,7 +271,7 @@ const ChatBot = () => {
       ));
     }
 
-    // Plain object (JSON), pretty print
+    // Plain object
     if (msg.text && typeof msg.text === "object") {
       return (
         <pre style={{ margin: 0, fontFamily: "monospace" }}>
@@ -289,7 +280,7 @@ const ChatBot = () => {
       );
     }
 
-    // Fallback (covers numbers, booleans, etc.)
+    // Fallback
     return <span>{String(msg && msg.text)}</span>;
   }
 
