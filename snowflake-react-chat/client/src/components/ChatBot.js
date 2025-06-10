@@ -1,39 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
-import { Document, Packer, Paragraph, TextRun, ImageRun } from "docx";
+import { Document, Packer, Paragraph, TextRun } from "docx";
 import { saveAs } from "file-saver";
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
-import { toJpeg } from 'html-to-image'; // Using JPEG for max compatibility
-import { createRoot } from "react-dom/client";
-
-// Helper to decode DataURL to Uint8Array for docx
-function dataURLToUint8Array(dataURL) {
-  const base64 = dataURL.split(',')[1];
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-}
-
-// Chart for export as image (offscreen)
-const ChartForExport = ({ chartData, xKey, yKey }) => (
-  <div style={{ width: 430, height: 270, background: '#fff' }}>
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={chartData}>
-        <XAxis dataKey={xKey} />
-        <YAxis />
-        <RechartsTooltip />
-        <Bar dataKey={yKey} fill="#7c3aed" />
-      </BarChart>
-    </ResponsiveContainer>
-  </div>
-);
-
-// HARDCODED_ANSWERS and formatSnowflakeResponse stay the same...
 
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
@@ -84,125 +53,43 @@ function TypingIndicator() {
   );
 }
 
+// === 🔥 This function downloads the chat as-is ===
 async function downloadSummaryDocx(messages) {
-  let summary = "No summary available.";
-  let chartData, chartType, xKey, yKey;
-  try {
-    const res = await fetch('http://localhost:4000/api/summarize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ history: messages })
-    });
-    const data = await res.json();
-    summary = data.summary || summary;
-    chartData = data.chartData;
-    chartType = data.chartType;
-    xKey = data.xKey || data.chartLabelKey || (chartData && chartData[0] && Object.keys(chartData[0])[0]);
-    yKey = data.yKey || data.chartValueKey || (chartData && chartData[0] && Object.keys(chartData[0])[1]);
-  } catch (e) {
-    console.error("Failed to fetch or parse summary/chartData:", e);
-  }
-
-  let summaryToParse = summary;
-  if (chartData && chartData.length > 0 && chartType === "bar") {
-    summaryToParse = summaryToParse.replace(/Recommendation:[\s\S]*/i, '').trim();
-  }
-
   const docChildren = [
     new Paragraph({
       children: [
-        new TextRun({ text: "Field Insights Assistant - Chat Summary", bold: true, size: 36 }),
-        new TextRun({ text: "\n" }),
+        new TextRun({ text: "Field Insights Assistant - Full Chat Transcript", bold: true, size: 36 }),
+        new TextRun({ text: "\n\n" }),
       ]
     }),
   ];
 
-  // Section splitting/formatting as before
-  const sectionRegex = /(Request for .+:|Data Provided:|Recommendation:)/g;
-  const sections = summaryToParse.split(sectionRegex).filter(s => s.trim());
-  for (let i = 0; i < sections.length; i++) {
-    if (/^(Request for .+:|Data Provided:|Recommendation:)/.test(sections[i])) {
-      docChildren.push(
-        new Paragraph({
-          spacing: { after: 60 },
-          children: [new TextRun({ text: sections[i].replace(":", ""), bold: true, size: 28 })]
-        })
-      );
-      if (sections[i + 1]) {
-        const lines = sections[i + 1].split('\n').map(l => l.trim()).filter(Boolean);
-        lines.forEach(line => {
-          if (line.startsWith("●")) {
-            docChildren.push(
-              new Paragraph({
-                bullet: { level: 0 },
-                spacing: { after: 40 },
-                children: [new TextRun({ text: line.replace(/^●\s*/, '') })]
-              })
-            );
-          } else if (line) {
-            docChildren.push(
-              new Paragraph({
-                spacing: { after: 40 },
-                children: [new TextRun({ text: line })]
-              })
-            );
-          }
-        });
-      }
-      i++;
-    }
-  }
-
-  // --- Render chart as image if chart data present ---
-  if (chartData && chartData.length > 0 && chartType === "bar" && xKey && yKey) {
-    const chartContainer = document.createElement('div');
-    chartContainer.style.position = "absolute";
-    chartContainer.style.left = "-9999px";
-    chartContainer.style.top = "0";
-    chartContainer.style.width = "430px";
-    chartContainer.style.height = "270px";
-    document.body.appendChild(chartContainer);
-
-    try {
-      const root = createRoot(chartContainer);
-      root.render(<ChartForExport chartData={chartData} xKey={xKey} yKey={yKey} />);
-      // Give more time to render
-      await new Promise(r => setTimeout(r, 350));
-      let chartImageDataUrl = null;
-      try {
-        chartImageDataUrl = await toJpeg(chartContainer, { quality: 0.95 });
-        window.open(chartImageDataUrl, "_blank"); // For quick debug: comment out if not needed
-      } catch (e) {
-        console.error("toJpeg failed:", e);
-      }
-      root.unmount();
-      document.body.removeChild(chartContainer);
-
-      if (chartImageDataUrl) {
-        docChildren.push(
-          new Paragraph({ text: "Sales Chart:", spacing: { after: 120 }, bold: true }),
-          new Paragraph({
-            children: [
-              new ImageRun({
-                data: dataURLToUint8Array(chartImageDataUrl),
-                transformation: { width: 430, height: 270 }
-              })
-            ],
-            spacing: { after: 200 }
+  messages.forEach((msg, idx) => {
+    if (!msg || !msg.role || !msg.text) return;
+    docChildren.push(
+      new Paragraph({
+        spacing: { after: 80 },
+        children: [
+          new TextRun({
+            text: msg.role === "user" ? "User: " : "Assistant: ",
+            bold: true,
+            color: msg.role === "user" ? "2A56C6" : "7c3aed"
+          }),
+          new TextRun({
+            text: typeof msg.text === "string" ? msg.text : JSON.stringify(msg.text, null, 2),
+            color: "22223b",
           })
-        );
-      }
-    } catch (err) {
-      console.error("Chart rendering/image error:", err);
-    }
-  }
+        ]
+      })
+    );
+  });
 
   const doc = new Document({
     sections: [{ properties: {}, children: docChildren }]
   });
 
   const blob = await Packer.toBlob(doc);
-  saveAs(blob, `chat-summary-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.docx`);
+  saveAs(blob, `chat-transcript-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.docx`);
 }
 
 const ChatBot = () => {
@@ -480,10 +367,9 @@ const ChatBot = () => {
               padding: "8px 0",
             }}
           >
-            {/* Download button absolutely positioned at left */}
             <button
               onClick={() => downloadSummaryDocx(messages)}
-              title="Download summary"
+              title="Download chat transcript"
               className="header-action-btn"
               aria-label="Download summary"
               style={{
