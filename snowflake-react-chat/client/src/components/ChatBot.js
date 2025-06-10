@@ -56,14 +56,6 @@ function TypingIndicator() {
   );
 }
 
-// Only one Tooltip!
-const Tooltip = ({ children, text }) => (
-  <span className="feedback-tooltip">
-    {children}
-    <span className="feedback-tooltiptext">{text}</span>
-  </span>
-);
-
 // Chart for export as PNG image (offscreen)
 const ChartForExport = ({ chartData, xKey, yKey }) => (
   <div style={{ width: 430, height: 270, background: '#fff' }}>
@@ -91,8 +83,8 @@ async function downloadSummaryDocx(messages) {
     summary = data.summary || summary;
     chartData = data.chartData;
     chartType = data.chartType;
-    xKey = data.xKey || (chartData && chartData[0] && Object.keys(chartData[0])[0]);
-    yKey = data.yKey || (chartData && chartData[0] && Object.keys(chartData[0])[1]);
+    xKey = data.xKey || data.chartLabelKey || (chartData && chartData[0] && Object.keys(chartData[0])[0]);
+    yKey = data.yKey || data.chartValueKey || (chartData && chartData[0] && Object.keys(chartData[0])[1]);
   } catch {}
 
   // Remove Recommendation if chart is present
@@ -208,7 +200,6 @@ const ChatBot = () => {
     return [{ role: 'assistant', text: 'Hello 👋! How may I assist you?' }];
   });
 
-  const [feedback, setFeedback] = useState({});
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
@@ -237,10 +228,6 @@ const ChatBot = () => {
       return () => clearTimeout(timer);
     }
   }, [toast.visible]);
-
-  const showToast = (msg, type) => {
-    setToast({ message: msg, type: type, visible: true });
-  };
 
   // ----------- MAIN LOGIC ----------------
   const handleSendMessage = async (userMessage) => {
@@ -309,11 +296,6 @@ const ChatBot = () => {
     }
   };
 
-  const handleFeedback = (idx, type) => {
-    setFeedback(prev => ({ ...prev, [idx]: type }));
-    showToast(type === "up" ? "Marked as helpful!" : "Marked as not helpful!", type === "up" ? "success" : "error");
-  };
-
   const toggleTheme = () => setDarkMode(prev => !prev);
 
   const renderChatBubbleContent = (msg) => {
@@ -375,7 +357,6 @@ const ChatBot = () => {
                   onClick={() => {
                     setMessages([{ role: 'assistant', text: 'Hello 👋! How may I assist you?' }]);
                     localStorage.removeItem('chatMessages');
-                    setFeedback({});
                   }}
                   title="Clear chat"
                   className="header-action-btn"
@@ -420,40 +401,6 @@ const ChatBot = () => {
                 <div className={`chat-bubble ${msg.role}`}>
                   {renderChatBubbleContent(msg)}
                 </div>
-                {msg.role === 'assistant' && (
-                  <div className="feedback-row">
-                    {feedback[idx] === undefined && (
-                      <>
-                        <Tooltip text="Mark as helpful">
-                          <button
-                            className="feedback-btn"
-                            onClick={() => handleFeedback(idx, 'up')}
-                            aria-label="Thumbs up"
-                            tabIndex={0}
-                          >👍</button>
-                        </Tooltip>
-                        <Tooltip text="Mark as not helpful">
-                          <button
-                            className="feedback-btn"
-                            onClick={() => handleFeedback(idx, 'down')}
-                            aria-label="Thumbs down"
-                            tabIndex={0}
-                          >👎</button>
-                        </Tooltip>
-                      </>
-                    )}
-                    {feedback[idx] === 'up' && (
-                      <Tooltip text="Marked as helpful!">
-                        <button className="feedback-btn selected up" aria-label="Thumbs up" tabIndex={0}>👍</button>
-                      </Tooltip>
-                    )}
-                    {feedback[idx] === 'down' && (
-                      <Tooltip text="Marked as not helpful">
-                        <button className="feedback-btn selected down" aria-label="Thumbs down" tabIndex={0}>👎</button>
-                      </Tooltip>
-                    )}
-                  </div>
-                )}
               </li>
             ))}
             {isTyping && (
@@ -466,23 +413,39 @@ const ChatBot = () => {
           </ul>
           <div className="chat-input">
             <textarea
-              ref={inputRef}
-              placeholder="Ask me anything..."
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage(input);
-                }
-              }}
-              rows={1}
-              className="chat-input-textarea"
-              style={{ overflow: 'hidden', resize: 'none' }}
-              disabled={isTyping}
-              autoFocus={isOpen}
-              aria-label="Type your message"
-            />
+  ref={inputRef}
+  placeholder="Ask me anything..."
+  value={input}
+  onChange={e => {
+    setInput(e.target.value);
+    // Auto resize
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 110) + "px"; // 110px = about 4 lines
+  }}
+  onKeyDown={e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage(input);
+      // Reset height after sending
+      setTimeout(() => {
+        if (inputRef.current) inputRef.current.style.height = "38px";
+      }, 80);
+    }
+  }}
+  rows={1}
+  className="chat-input-textarea"
+  style={{
+    overflow: "hidden",
+    resize: "none",
+    height: "38px",  // Start with single line
+    maxHeight: "80px" // About 4 lines (adjust as needed)
+  }}
+  disabled={isTyping}
+  autoFocus={isOpen}
+  aria-label="Type your message"
+/>
+
             <button
               onClick={() => handleSendMessage(input)}
               title="Send message"
