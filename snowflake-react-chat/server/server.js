@@ -179,7 +179,7 @@ Let me know if something needs to be updated in the query.
 **What to clarify:** For sales queries, always clarify or confirm:
 - Metric(s) of interest (e.g., TRx, NBRx, etc.)
 - Geography (e.g., Region, Ecosystem, Territory, etc.)
-- Brand(s) or product(s) (e.g,, Exelon, Axanol, Eliprax, etc.)
+- Brand(s) or product(s) (e.g,, AXANOL, NUVEXA, EXELON, VELOMIR, ELIPRAX)
 - Time period (e.g., CW, R4W, R17W, TTD, YTD, etc.)
 - Channel (e.g., Retail, LTC, etc.)
 
@@ -193,7 +193,7 @@ Assistant message:
 Great! To get you the most relevant results, could you clarify a few details?
 - Which sales metric are you interested in (e.g., TRx, NBRx)?
 - What time period should I consider (e.g., current week, last 4 weeks, YTD, R17W)?
-- Do you want data for a specific brand (e.g., Exelon, Risperidone) or all brands?
+- Do you want data for a specific brand (e.g., AXANOL, NUVEXA) or all brands?
 - Any other filters, such as sales channel or age group?
 
 "finalized": false

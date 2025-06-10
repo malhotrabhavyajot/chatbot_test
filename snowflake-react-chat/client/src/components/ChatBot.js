@@ -4,9 +4,36 @@ import ChatbotIcon from '../assets/chatbot-toggler.png';
 import { Document, Packer, Paragraph, TextRun, ImageRun } from "docx";
 import { saveAs } from "file-saver";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
-import { toPng } from 'html-to-image';
+import { toJpeg } from 'html-to-image'; // Using JPEG for max compatibility
 import { createRoot } from "react-dom/client";
 
+// Helper to decode DataURL to Uint8Array for docx
+function dataURLToUint8Array(dataURL) {
+  const base64 = dataURL.split(',')[1];
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// Chart for export as image (offscreen)
+const ChartForExport = ({ chartData, xKey, yKey }) => (
+  <div style={{ width: 430, height: 270, background: '#fff' }}>
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={chartData}>
+        <XAxis dataKey={xKey} />
+        <YAxis />
+        <RechartsTooltip />
+        <Bar dataKey={yKey} fill="#7c3aed" />
+      </BarChart>
+    </ResponsiveContainer>
+  </div>
+);
+
+// HARDCODED_ANSWERS and formatSnowflakeResponse stay the same...
 
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
@@ -57,23 +84,6 @@ function TypingIndicator() {
   );
 }
 
-// Chart for export as PNG image (offscreen)
-const ChartForExport = ({ chartData, xKey, yKey }) => (
-  <div style={{ width: 430, height: 270, background: '#fff' }}>
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={chartData}>
-        <XAxis dataKey={xKey} />
-        <YAxis />
-        <RechartsTooltip />
-        <Bar dataKey={yKey} fill="#7c3aed" />
-      </BarChart>
-    </ResponsiveContainer>
-  </div>
-);
-
-
-// ... ChartForExport definition must exist ...
-
 async function downloadSummaryDocx(messages) {
   let summary = "No summary available.";
   let chartData, chartType, xKey, yKey;
@@ -92,9 +102,6 @@ async function downloadSummaryDocx(messages) {
   } catch (e) {
     console.error("Failed to fetch or parse summary/chartData:", e);
   }
-
-  console.log("summary:", summary);
-  console.log("chartData:", chartData, "chartType:", chartType, "xKey:", xKey, "yKey:", yKey);
 
   let summaryToParse = summary;
   if (chartData && chartData.length > 0 && chartType === "bar") {
@@ -160,17 +167,16 @@ async function downloadSummaryDocx(messages) {
       const root = createRoot(chartContainer);
       root.render(<ChartForExport chartData={chartData} xKey={xKey} yKey={yKey} />);
       // Give more time to render
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 350));
       let chartImageDataUrl = null;
       try {
-        chartImageDataUrl = await toPng(chartContainer);
+        chartImageDataUrl = await toJpeg(chartContainer, { quality: 0.95 });
+        window.open(chartImageDataUrl, "_blank"); // For quick debug: comment out if not needed
       } catch (e) {
-        console.error("toPng failed:", e);
+        console.error("toJpeg failed:", e);
       }
       root.unmount();
       document.body.removeChild(chartContainer);
-
-      console.log("chartImageDataUrl:", chartImageDataUrl ? chartImageDataUrl.slice(0,40) + "..." : chartImageDataUrl);
 
       if (chartImageDataUrl) {
         docChildren.push(
@@ -178,7 +184,7 @@ async function downloadSummaryDocx(messages) {
           new Paragraph({
             children: [
               new ImageRun({
-                data: await fetch(chartImageDataUrl).then(r => r.arrayBuffer()),
+                data: dataURLToUint8Array(chartImageDataUrl),
                 transformation: { width: 430, height: 270 }
               })
             ],
@@ -199,7 +205,6 @@ async function downloadSummaryDocx(messages) {
   saveAs(blob, `chat-summary-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.docx`);
 }
 
- 
 const ChatBot = () => {
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem('chatMessages');
@@ -420,39 +425,37 @@ const ChatBot = () => {
           </ul>
           <div className="chat-input">
             <textarea
-  ref={inputRef}
-  placeholder="Ask me anything..."
-  value={input}
-  onChange={e => {
-    setInput(e.target.value);
-    // Auto resize
-    const el = e.target;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 110) + "px"; // 110px = about 4 lines
-  }}
-  onKeyDown={e => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage(input);
-      // Reset height after sending
-      setTimeout(() => {
-        if (inputRef.current) inputRef.current.style.height = "38px";
-      }, 80);
-    }
-  }}
-  rows={1}
-  className="chat-input-textarea"
-  style={{
-    overflow: "hidden",
-    resize: "none",
-    height: "38px",  // Start with single line
-    maxHeight: "80px" // About 4 lines (adjust as needed)
-  }}
-  disabled={isTyping}
-  autoFocus={isOpen}
-  aria-label="Type your message"
-/>
-
+              ref={inputRef}
+              placeholder="Ask me anything..."
+              value={input}
+              onChange={e => {
+                setInput(e.target.value);
+                // Auto resize
+                const el = e.target;
+                el.style.height = "auto";
+                el.style.height = Math.min(el.scrollHeight, 110) + "px";
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage(input);
+                  setTimeout(() => {
+                    if (inputRef.current) inputRef.current.style.height = "38px";
+                  }, 80);
+                }
+              }}
+              rows={1}
+              className="chat-input-textarea"
+              style={{
+                overflow: "hidden",
+                resize: "none",
+                height: "38px",
+                maxHeight: "80px"
+              }}
+              disabled={isTyping}
+              autoFocus={isOpen}
+              aria-label="Type your message"
+            />
             <button
               onClick={() => handleSendMessage(input)}
               title="Send message"
@@ -465,43 +468,43 @@ const ChatBot = () => {
               </svg>
             </button>
           </div>
-<footer
-  className="chatbot-footer"
-  style={{
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-    width: "100%",
-    minHeight: "40px",
-    padding: "8px 0",
-  }}
->
-  {/* Download button absolutely positioned at left */}
-  <button
-    onClick={() => downloadSummaryDocx(messages)}
-    title="Download summary"
-    className="header-action-btn"
-    aria-label="Download summary"
-    style={{
-      position: "absolute",
-      left: 0,
-      top: "45%",
-      transform: "translateY(-50%)",
-      background: "none",
-      border: "none",
-      cursor: "pointer",
-      padding: "0 0 0 12px",
-      height: "100%",
-      display: "flex",
-      alignItems: "center"
-    }}
-  >
-    <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
-      <path d="M12 16v-8M12 16l-4-4M12 16l4-4M4 20h16" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  </button>
-</footer>
+          <footer
+            className="chatbot-footer"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative",
+              width: "100%",
+              minHeight: "40px",
+              padding: "8px 0",
+            }}
+          >
+            {/* Download button absolutely positioned at left */}
+            <button
+              onClick={() => downloadSummaryDocx(messages)}
+              title="Download summary"
+              className="header-action-btn"
+              aria-label="Download summary"
+              style={{
+                position: "absolute",
+                left: 0,
+                top: "45%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "0 0 0 12px",
+                height: "100%",
+                display: "flex",
+                alignItems: "center"
+              }}
+            >
+              <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+                <path d="M12 16v-8M12 16l-4-4M12 16l4-4M4 20h16" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </footer>
         </div>
       )}
     </div>
