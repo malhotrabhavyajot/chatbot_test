@@ -11,16 +11,15 @@ const { OpenAI } = require('openai');
 
 const app = express();
 
-// CORS: Restrict in production, open for dev
 const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-  'https://chatbot-test-1-wi2q.onrender.com' // <-- add any deployed URLs you need!
+  'https://chatbot-test-1-wi2q.onrender.com'
 ];
 
 app.use(cors({
   origin: function(origin, callback) {
-    if (!origin) return callback(null, true); // allow server-to-server, curl, etc.
+    if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     } else {
@@ -28,7 +27,6 @@ app.use(cors({
     }
   }
 }));
-
 
 app.use(express.json());
 
@@ -145,7 +143,7 @@ app.post('/api/clarify', async (req, res) => {
   try {
     const { userMessage } = req.body;
 
-const systemPrompt = `
+ const systemPrompt = `
 You are a reporting agent that helps answer reps by reading their reports for a pharmaceutical data analytics chatbot. 
 The queries reps ask are often incomplete, so you help them complete their query by asking for missing information in a conversational, friendly way. Let them know if asked how you can help them.
 
@@ -353,6 +351,7 @@ Your response must ALWAYS be a valid JSON object as specified above. Do not incl
 
 Here is the user query:
 `;
+
     if (!conversationHistories[sessionId]) {
       conversationHistories[sessionId] = [
         { role: "system", content: systemPrompt }
@@ -406,7 +405,7 @@ app.post('/api/summarize', async (req, res) => {
       return res.status(400).json({ summary: "No chat history provided." });
     }
 
-    // Try to extract a numeric data table from assistant responses
+    // --- Try to extract chartData from JSON-like arrays in the responses ---
     let chartData = null;
     let chartType = null;
     let chartLabelKey = null;
@@ -420,68 +419,101 @@ app.post('/api/summarize', async (req, res) => {
         (msg.text.includes('{') || msg.text.includes('['))
       ) {
         try {
-          // Look for an embedded array of objects in string form
           const arrMatch = msg.text.match(/\[([^\]]+)\]/s);
           if (arrMatch) {
             const arrStr = '[' + arrMatch[1] + ']';
             const arr = JSON.parse(arrStr.replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":'));
             if (Array.isArray(arr) && arr.length > 0 && typeof arr[0] === 'object') {
               chartData = arr;
-              // Pick a chart type: bar for >2, pie for 2, line if "trend" or "time" found
               if (arr.length <= 5) chartType = "pie";
               else chartType = "bar";
-              // Heuristic: use first object keys
               chartLabelKey = Object.keys(arr[0])[0];
               chartValueKey = Object.keys(arr[0])[1];
               chartTitle = "Key Data Visualization";
               break;
             }
           }
-        } catch (e) {
-          // Not JSON, skip
-        }
+        } catch (e) {}
       }
     }
 
-    // Compose the summary prompt
+    // --- Fallback: Extract - BRAND: VALUE lines from the most recent assistant message ---
+    if (!chartData) {
+      let extractedChartData = [];
+      const regex = /-\s*([A-Z][A-Z0-9\s\-\(\)]+):\s*([-\d.,]+)/gi;
+      let lastMsgWithList = null;
+      for (let i = history.length - 1; i >= 0; i--) {
+        if (
+          history[i].role === "assistant" &&
+          typeof history[i].text === "string" &&
+          regex.test(history[i].text)
+        ) {
+          lastMsgWithList = history[i].text;
+          break;
+        }
+      }
+      if (lastMsgWithList) {
+        let match;
+        while ((match = regex.exec(lastMsgWithList)) !== null) {
+          extractedChartData.push({
+            label: match[1].trim(),
+            value: Number(match[2].replace(/,/g, ''))
+          });
+        }
+      }
+      if (extractedChartData.length > 0) {
+        chartData = extractedChartData;
+        chartType = chartData.length > 2 ? "bar" : "pie";
+        chartLabelKey = "label";
+        chartValueKey = "value";
+        chartTitle = "Sales by Brand";
+      }
+    }
+
+    // --- Build the chat transcript string for LLM summarization ---
     const chatText = history.map(
       (msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.text ? (typeof msg.text === "string" ? msg.text : JSON.stringify(msg.text)) : ""}`
     ).join('\n');
 
+    // --- (Optional) log for debugging ---
+    console.log("===== Chat Text sent to LLM for summarization =====\n" + chatText + "\n===== END =====");
+    console.log(chartData, chartType, chartLabelKey, chartValueKey);
+
+    // --- Build the prompt for OpenAI ---
     let summaryPrompt;
     if (chartData) {
       summaryPrompt = `
-You are a smart assistant for pharmaceutical analytics. Summarize the following chat between a user and the assistant. 
-Make the summary visually beautiful for a report.
-- Start with a clear, friendly summary in 2-3 sentences.
-- If the chat includes data or tables, recommend what type of chart would best visualize it (bar, line, pie, etc.) and mention this in the summary.
-- Add a section with bullet points that highlight key data insights.
-- If chartData is present, mention the chart and provide a short caption for it.
-- Use emojis, sections, and bold for headings if you want to make it more visual.
-- Maximum 7 sentences for the main summary.
+You are a smart assistant for pharmaceutical analytics. Summarize the following chat between a user and the assistant in a style suitable for a business report.
 
-Chat:
+Instructions:
+- Start with a friendly, concise summary (2–3 sentences).
+- If data or tables are present, recommend the best chart (bar, line, etc.) and mention this in your summary.
+- Add bullet points for key insights or findings.
+- If data is present, include a section at the end labeled "Chart Data (JSON):" and output the array as JSON for direct use in a chart (for example, for Recharts or Chart.js).
+- Also add a one-line caption for the chart under "Chart Caption:".
+- Use section headers, bold, and emojis for visual appeal.
+- Limit the main summary section to 7 sentences.
+
+Chat Transcript:
 ${chatText}
 
 Summary:
-- (Begin with a friendly summary paragraph.)
-- (Add bullet points if there are multiple key insights.)
-- (If a chart should be shown, mention what kind and what it shows.)
-      `;
+`;
     } else {
       summaryPrompt = `
-You are an expert assistant for pharmaceutical field data and analytics. Summarize the following chat between a user and the assistant.
-- Be clear, concise, and easy to read.
-- Highlight the main questions asked, clarifications, and the key answers given.
-- If the chat is mostly clarifications, summarize the clarifications, not just the last answer.
-- Use bullet points if needed, and add clear section headers if multiple topics are covered.
-- Maximum 5-7 sentences.
+You are an expert assistant for pharmaceutical field data and analytics. Summarize the following chat between a user and the assistant for inclusion in a business report.
 
-Chat:
+Instructions:
+- Be clear, concise, and easy to read.
+- Highlight the main questions, clarifications, and key answers.
+- Use bullet points and section headers if needed.
+- Limit your summary to 5–7 sentences.
+
+Chat Transcript:
 ${chatText}
 
 Summary:
-      `;
+`;
     }
 
     const summaryResponse = await openai.chat.completions.create({
@@ -495,7 +527,7 @@ Summary:
     });
 
     const summary = summaryResponse.choices[0].message.content.trim();
-console.log(chartData, chartType, chartLabelKey, chartValueKey)
+
     return res.json({
       summary,
       chartData,
@@ -509,6 +541,7 @@ console.log(chartData, chartType, chartLabelKey, chartValueKey)
     return res.status(500).json({ summary: "Sorry, I could not generate a summary." });
   }
 });
+
 
 // ====== HEALTHCHECK ROUTE ======
 app.get('/test', (req, res) => res.send("SERVER FILE IS RUNNING!"));

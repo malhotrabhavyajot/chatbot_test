@@ -5,7 +5,8 @@ import { Document, Packer, Paragraph, TextRun, ImageRun } from "docx";
 import { saveAs } from "file-saver";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { toPng } from 'html-to-image';
-import ReactDOM from 'react-dom';
+import { createRoot } from "react-dom/client";
+
 
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
@@ -70,6 +71,9 @@ const ChartForExport = ({ chartData, xKey, yKey }) => (
   </div>
 );
 
+
+// ... ChartForExport definition must exist ...
+
 async function downloadSummaryDocx(messages) {
   let summary = "No summary available.";
   let chartData, chartType, xKey, yKey;
@@ -85,9 +89,13 @@ async function downloadSummaryDocx(messages) {
     chartType = data.chartType;
     xKey = data.xKey || data.chartLabelKey || (chartData && chartData[0] && Object.keys(chartData[0])[0]);
     yKey = data.yKey || data.chartValueKey || (chartData && chartData[0] && Object.keys(chartData[0])[1]);
-  } catch {}
+  } catch (e) {
+    console.error("Failed to fetch or parse summary/chartData:", e);
+  }
 
-  // Remove Recommendation if chart is present
+  console.log("summary:", summary);
+  console.log("chartData:", chartData, "chartType:", chartType, "xKey:", xKey, "yKey:", yKey);
+
   let summaryToParse = summary;
   if (chartData && chartData.length > 0 && chartType === "bar") {
     summaryToParse = summaryToParse.replace(/Recommendation:[\s\S]*/i, '').trim();
@@ -102,19 +110,17 @@ async function downloadSummaryDocx(messages) {
     }),
   ];
 
-  // Bullet/section formatting:
+  // Section splitting/formatting as before
   const sectionRegex = /(Request for .+:|Data Provided:|Recommendation:)/g;
   const sections = summaryToParse.split(sectionRegex).filter(s => s.trim());
   for (let i = 0; i < sections.length; i++) {
     if (/^(Request for .+:|Data Provided:|Recommendation:)/.test(sections[i])) {
-      // Section header
       docChildren.push(
         new Paragraph({
           spacing: { after: 60 },
           children: [new TextRun({ text: sections[i].replace(":", ""), bold: true, size: 28 })]
         })
       );
-      // Section content (the next element)
       if (sections[i + 1]) {
         const lines = sections[i + 1].split('\n').map(l => l.trim()).filter(Boolean);
         lines.forEach(line => {
@@ -136,13 +142,12 @@ async function downloadSummaryDocx(messages) {
           }
         });
       }
-      i++; // Skip content
+      i++;
     }
   }
 
   // --- Render chart as image if chart data present ---
   if (chartData && chartData.length > 0 && chartType === "bar" && xKey && yKey) {
-    // Render the chart offscreen
     const chartContainer = document.createElement('div');
     chartContainer.style.position = "absolute";
     chartContainer.style.left = "-9999px";
@@ -151,37 +156,38 @@ async function downloadSummaryDocx(messages) {
     chartContainer.style.height = "270px";
     document.body.appendChild(chartContainer);
 
-    await new Promise(resolve => {
-      ReactDOM.render(
-        <ChartForExport chartData={chartData} xKey={xKey} yKey={yKey} />,
-        chartContainer,
-        resolve
-      );
-    });
-
-    await new Promise(r => setTimeout(r, 100));
-
-    let chartImageDataUrl = null;
     try {
-      chartImageDataUrl = await toPng(chartContainer);
-    } catch (e) {}
+      const root = createRoot(chartContainer);
+      root.render(<ChartForExport chartData={chartData} xKey={xKey} yKey={yKey} />);
+      // Give more time to render
+      await new Promise(r => setTimeout(r, 300));
+      let chartImageDataUrl = null;
+      try {
+        chartImageDataUrl = await toPng(chartContainer);
+      } catch (e) {
+        console.error("toPng failed:", e);
+      }
+      root.unmount();
+      document.body.removeChild(chartContainer);
 
-    ReactDOM.unmountComponentAtNode(chartContainer);
-    document.body.removeChild(chartContainer);
+      console.log("chartImageDataUrl:", chartImageDataUrl ? chartImageDataUrl.slice(0,40) + "..." : chartImageDataUrl);
 
-    if (chartImageDataUrl) {
-      docChildren.push(
-        new Paragraph({ text: "Sales Chart:", spacing: { after: 120 }, bold: true }),
-        new Paragraph({
-          children: [
-            new ImageRun({
-              data: await fetch(chartImageDataUrl).then(r => r.arrayBuffer()),
-              transformation: { width: 430, height: 270 }
-            })
-          ],
-          spacing: { after: 200 }
-        })
-      );
+      if (chartImageDataUrl) {
+        docChildren.push(
+          new Paragraph({ text: "Sales Chart:", spacing: { after: 120 }, bold: true }),
+          new Paragraph({
+            children: [
+              new ImageRun({
+                data: await fetch(chartImageDataUrl).then(r => r.arrayBuffer()),
+                transformation: { width: 430, height: 270 }
+              })
+            ],
+            spacing: { after: 200 }
+          })
+        );
+      }
+    } catch (err) {
+      console.error("Chart rendering/image error:", err);
     }
   }
 
@@ -193,6 +199,7 @@ async function downloadSummaryDocx(messages) {
   saveAs(blob, `chat-summary-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.docx`);
 }
 
+ 
 const ChatBot = () => {
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem('chatMessages');
