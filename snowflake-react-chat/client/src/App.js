@@ -15,6 +15,7 @@ function App() {
       {/* Power BI Report filling full screen */}
       <iframe
       title="Power BI Report"
+      // src = "https://app.powerbi.com/reportEmbed?reportId=f1470446-6df8-4e57-80ef-a9ebfc1c19cf&autoAuth=true&ctid=ec3c7dee-d552-494b-a393-7f941a90b985"
       src="https://app.powerbi.com/reportEmbed?reportId=9618f242-9df5-4505-9883-b7e1955dfef3&autoAuth=true&ctid=ec3c7dee-d552-494b-a393-7f941a90b985"
       frameBorder="0"
       allowFullScreen
@@ -29,6 +30,5 @@ function App() {
     </div>
   );
 }
-
 export default App;
 

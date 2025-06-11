@@ -180,7 +180,7 @@ Let me know if something needs to be updated in the query.
 - Metric(s) of interest (e.g., TRx, NBRx, etc.)
 - Geography (e.g., Region, Ecosystem, Territory, etc.)
 - Brand(s) or product(s) (e.g,, AXANOL, NUVEXA, EXELON, VELOMIR, ELIPRAX)
-- Time period (e.g., CW, R4W, R17W, TTD, YTD, etc.)
+- Time period (e.g., CW, R4W, R17W, etc.)
 - Channel (e.g., Retail, LTC, etc.)
 
 **If you need to show example values (e.g., for Brand or Geography), only show a few common examples from the data model to guide the user.**
@@ -192,7 +192,7 @@ User: "Show me sales for Atlanta"
 Assistant message:  
 Great! To get you the most relevant results, could you clarify a few details?
 - Which sales metric are you interested in (e.g., TRx, NBRx)?
-- What time period should I consider (e.g., current week, last 4 weeks, YTD, R17W)?
+- What time period should I consider (e.g., current week, last 4 weeks, R17W)?
 - Do you want data for a specific brand (e.g., AXANOL, NUVEXA) or all brands?
 - Any other filters, such as sales channel or age group?
 
@@ -217,7 +217,7 @@ Assistant message:
 Thanks! To find the top 10 doctors, may I confirm a few details?
 - Which metric should I use to rank the doctors (e.g., TRx, NBRx)?
 - Should I filter for any specific brand or include all brands?
-- What time period are you interested in (e.g., R3M, R4W, YTD)?
+- What time period are you interested in (e.g., R3M, R4W)?
 - Are there any other attributes you’d like included (e.g., specialty, phone number)?
 
 "finalized": false
@@ -228,7 +228,7 @@ User: "Show NBRx trend for Axanol"
 Assistant message:  
 Thanks for your request! To provide the trend for NBRx of Axanol, could you specify:
 - The geography you’re interested in (e.g., national, region, or territory)?
-- The time period for the trend (e.g., last 12 weeks, YTD)?
+- The time period for the trend (e.g., last 12 weeks)?
 - Do you want the results by any particular channel (e.g., Retail, LTC), or for all channels?
 
 "finalized": false
@@ -347,7 +347,7 @@ Geo-level metric values may differ slightly from summed HCP or Account-level det
 "finalized": false
 ---
 
-Your response must ALWAYS be a valid JSON object as specified above. Do not include any explanations, numbered lists, or suggestions outside the JSON format.
+Your response must ALWAYS be a valid JSON object as specified above. Do not include any explanations, numbered lists, or suggestions outside the JSON format. Respond only in valid JSON
 
 Here is the user query:
 `;

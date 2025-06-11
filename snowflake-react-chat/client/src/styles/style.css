@@ -8,7 +8,7 @@
   --otsuka-ink:       #373D42;
   --otsuka-white:     #FFFFFF;
   --otsuka-bg-gradient: linear-gradient(120deg, #B4C9EA 50%, #426BBA 100%);
-  --otsuka-box-shadow: 0 8px 36px 0 #426bba22, 0 1.5px 6px #b4c9ea18;
+  --otsuka-box-shadow: 0 16px 40px 0 #426bba28, 0 2px 8px #b4c9ea22;
 }
 
 /* === BASE === */
@@ -33,7 +33,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--otsuka-white);
+  background-color: rgba(255,255,255,0.82);
+  backdrop-filter: blur(12px) saturate(180%);
   transition: all 0.27s cubic-bezier(.36,1.7,.72,.97);
   z-index: 9999;
   border: 1.5px solid var(--otsuka-blue);
@@ -50,17 +51,18 @@ body {
   max-width: 1200px;
 }
 .chatbot.modern-chatbot.dark-mode {
-  background: var(--otsuka-ink);
+  background-color: rgba(40,44,60,0.95);
   border-color: var(--otsuka-ink);
+  backdrop-filter: blur(8px) saturate(140%);
 }
 
 /* === HEADER === */
 .chatbot-header {
-  background: linear-gradient(90deg, var(--otsuka-lightblue) 85%, var(--otsuka-blue) 100%) !important;
-  color: var(--otsuka-blue);
+  background: linear-gradient(90deg, #B4C9EA 80%, #426BBA 100%) !important;
+  color: #fff;
   font-weight: 600;
   font-size: 19px;
-  padding: 10px 16px 8px 16px;
+  padding: 14px 22px 10px 22px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -96,12 +98,12 @@ body {
   color: var(--otsuka-ink);
 }
 .header-title-gradient {
-  color: var(--otsuka-blue) !important;
+  color: var(--otsuka-red) !important;
   font-weight: 800;
   display: inline;
 }
 .dark-mode .header-title { color: var(--otsuka-white) !important; }
-.dark-mode .header-title-gradient { color: var(--otsuka-lightblue) !important; }
+.dark-mode .header-title-gradient { color: var(--otsuka-red) !important; }
 .header-controls { display: flex; flex-direction: row; align-items: center; margin-left: auto; min-width: 0; flex-shrink: 0; }
 .header-actions { display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: 16px; margin-bottom: 0; margin-left: auto; }
 .header-action-btn {
@@ -117,12 +119,13 @@ body {
   height: 39px;
   width: 39px;
   margin: 0 4px;
-  transition: background 0.17s, box-shadow 0.13s;
+  transition: background 0.17s, box-shadow 0.13s, transform 0.13s;
 }
 .header-action-btn svg { width: 25px; height: 25px; display: block; margin: auto; }
 .header-action-btn:hover, .header-action-btn:active {
   background: var(--otsuka-lightblue) !important;
   box-shadow: 0 2px 6px #426bba14 !important;
+  transform: scale(0.96);
 }
 .dark-mode .header-action-btn:hover, .dark-mode .header-action-btn:active {
   background: #353b42 !important;
@@ -191,7 +194,8 @@ body {
   transition: box-shadow 0.18s, transform 0.22s cubic-bezier(.36,1.7,.72,.97), background 0.18s;
   animation: fadeInUp 0.23s cubic-bezier(.36,1.7,.72,.97);
   box-shadow: 0 3px 18px 0 #426bba18, 0 1.5px 8px 0 #b4c9ea13;
-  border: 1.5px solid transparent;
+  border: 1.1px solid #f3f4fa;
+  position: relative;
 }
 .chat-bubble.user {
   background: var(--otsuka-blue);
@@ -207,6 +211,9 @@ body {
   align-self: flex-start;
   border: 1.5px solid var(--otsuka-blue);
 }
+.chat-bubble.assistant:hover {
+  background: linear-gradient(90deg, #c9ddfa 70%, #B4C9EA 100%);
+}
 .dark-mode .chat-bubble.assistant {
   background: #232345;
   color: var(--otsuka-lightblue);
@@ -217,9 +224,14 @@ body {
   color: var(--otsuka-white);
   border: 1.5px solid var(--otsuka-lightblue);
 }
+.dark-mode .chat-bubble {
+  border: 1.1px solid #292941;
+}
+
+
 @media (max-width: 600px) {
   .chat-bubble.user, .chat-bubble.assistant {
-    font-size: 14px; padding: 11px 10px !important; word-break: break-word;
+    font-size: 14px; padding: 13px 10px !important; word-break: break-word;
   }
 }
 
@@ -285,33 +297,30 @@ body {
   align-items: center;
 }
 .feedback-btn {
-  background: var(--otsuka-lightblue);
-  border: 1.3px solid var(--otsuka-blue);
-  border-radius: 8px;
-  padding: 2.5px 10px;
-  font-size: 15px;
-  cursor: pointer;
+  background: transparent;
+  border: none;
   color: var(--otsuka-blue);
+  font-size: 20px;
+  padding: 2px 8px;
+  cursor: pointer;
   outline: none;
-  transition: all 0.14s cubic-bezier(.4,1.7,.72,.97), transform 0.18s cubic-bezier(.36,1.7,.72,.97);
+  transition: color 0.18s, background 0.18s, transform 0.13s;
   position: relative;
   user-select: none;
 }
-.feedback-btn:active { transform: scale(1.14); }
+.feedback-btn:active { transform: scale(0.96);}
 .feedback-btn.selected.up {
-  background: var(--otsuka-blue) !important; border-color: var(--otsuka-blue); color: var(--otsuka-white); animation: pop-feedback 0.23s;
+  color: #7acda2;
+  animation: pop-feedback 0.23s;
 }
 .feedback-btn.selected.down {
-  background: var(--otsuka-red) !important; border-color: var(--otsuka-red); color: var(--otsuka-white); animation: pop-feedback 0.23s;
+  color: var(--otsuka-red);
+  animation: pop-feedback 0.23s;
 }
 .feedback-btn:hover, .feedback-btn:focus-visible {
-  background: var(--otsuka-blue); color: var(--otsuka-white); z-index: 2;
-}
-.feedback-btn.selected.up:hover, .feedback-btn.selected.up:focus-visible {
-  background: #5c88d6; border-color: #426bba;
-}
-.feedback-btn.selected.down:hover, .feedback-btn.selected.down:focus-visible {
-  background: #d33e57; border-color: #b01c2e;
+  color: var(--otsuka-red);
+  background: #e7effa55;
+  z-index: 2;
 }
 @keyframes pop-feedback {
   0% { transform: scale(0.9);}
@@ -354,14 +363,14 @@ body {
   transform: translateX(-50%);
   min-width: 120px;
   max-width: 90%;
-  background: var(--otsuka-blue);
-  color: var(--otsuka-white);
-  border-radius: 10px;
+  border-radius: 18px;
+  background: linear-gradient(90deg, #B4C9EA 60%, #426BBA 100%);
+  color: #fff;
   font-size: 15px;
   padding: 10px 18px;
   font-weight: 500;
   z-index: 98;
-  box-shadow: 0 2px 12px #426bba23;
+  box-shadow: 0 8px 36px 0 #426bba33;
   opacity: 1;
   animation: fadeInToast 0.43s cubic-bezier(.36,1.7,.72,.97);
   transition: opacity 0.4s, background 0.21s;
@@ -391,19 +400,19 @@ body {
 /* === TYPING INDICATOR === */
 .typing-indicator {
   display: inline-flex;
-  gap: 3.5px;
+  gap: 6px;
   align-items: center;
   margin-left: 3px;
   vertical-align: middle;
-  height: 18px;
+  height: 22px;
 }
 .typing-indicator span {
   display: block;
-  width: 7px;
-  height: 7px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: var(--otsuka-lightblue);
-  opacity: 0.6;
+  background: #B01C2E;
+  opacity: 0.65;
   animation: typingBounce 1.2s infinite both;
 }
 .typing-indicator span:nth-child(2) { animation-delay: 0.21s; }
@@ -412,12 +421,22 @@ body {
   0%, 80%, 100% { transform: translateY(0);}
   30% { transform: translateY(-7px);}
 }
+.dark-mode .typing-indicator span {
+  background: #B4C9EA;
+  opacity: 0.95;
+}
+.chat-bubble.assistant:has(.typing-indicator) {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
 
 /* === INPUT & SEND BUTTON === */
 .chat-input {
   display: flex;
   align-items: center;
-  padding: 9px 18px;
+  padding: 12px 18px;
   border-top: 1.2px solid var(--otsuka-lightblue);
   background-color: #f9f9f9;
   gap: 10px;
@@ -514,10 +533,10 @@ body {
   align-items: center;
   justify-content: center;
   gap: 9px;
-  padding: 9px 0 12px 0;
+  padding: 11px 0 16px 0;
   font-size: 15px;
   color: var(--otsuka-blue);
-  background: var(--otsuka-lightblue) !important;
+  background: linear-gradient(90deg, #B4C9EA 60%, #426BBA 100%) !important;
   font-weight: 500;
   min-height: 38px;
   border-top: 1.4px solid var(--otsuka-blue);
@@ -591,5 +610,53 @@ body {
 
 /* === CUSTOM SCROLLBAR === */
 ::-webkit-scrollbar { width: 8px; background: var(--otsuka-lightblue);}
-::-webkit-scrollbar-thumb { background: var(--otsuka-blue); border-radius: 10px;}
-.dark-mode ::-webkit-scrollbar-thumb { background: #232345; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(120deg, #B4C9EA 60%, #426BBA 100%);
+  border-radius: 10px;
+}
+.dark-mode ::-webkit-scrollbar-thumb {
+  background: linear-gradient(120deg, #232346 60%, #B4C9EA 100%);
+}
+
+/* --- Download Button in Footer --- */
+.chatbot-footer .header-action-btn[aria-label="Download summary"],
+.chatbot-footer .header-action-btn[aria-label="Download chat transcript"] {
+  position: absolute;
+  left: 0;
+  top: 45%;
+  transform: translateY(-50%);
+  background: none !important;
+  border: none !important;
+  cursor: pointer;
+  padding: 0 0 0 12px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+/* Optional: Remove border on download button when focused/active */
+.chatbot-footer .header-action-btn[aria-label="Download summary"]:focus,
+.chatbot-footer .header-action-btn[aria-label="Download chat transcript"]:focus {
+  outline: none !important;
+  border: none !important;
+}
+
+/* --- Modern Toggler, position fix if needed --- */
+.chatbot-toggler.modern-toggler {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 10000;
+}
+
+/* === RESPONSIVE ENHANCEMENTS === */
+@media (max-width: 600px) {
+  .chatbot.modern-chatbot { min-width: 98vw; }
+  .chatbot-header, .chatbot-footer { padding: 14px 10px; }
+  .chat-bubble { padding: 13px 10px; }
+}
+
+.button-danger:hover, .button-danger:focus {
+  background: #B01C2E;
+  color: #fff;
+}
