@@ -53,7 +53,7 @@ function TypingIndicator() {
   );
 }
 
-// === 🔥 This function downloads the chat as-is ===
+// === Downloads the chat as-is ===
 async function downloadSummaryDocx(messages) {
   const docChildren = [
     new Paragraph({
@@ -64,7 +64,7 @@ async function downloadSummaryDocx(messages) {
     }),
   ];
 
-  messages.forEach((msg, idx) => {
+  messages.forEach((msg) => {
     if (!msg || !msg.role || !msg.text) return;
     docChildren.push(
       new Paragraph({
@@ -73,7 +73,7 @@ async function downloadSummaryDocx(messages) {
           new TextRun({
             text: msg.role === "user" ? "User: " : "Assistant: ",
             bold: true,
-            color: msg.role === "user" ? "2A56C6" : "7c3aed"
+            color: msg.role === "user" ? "426BBA" : "373D42"
           }),
           new TextRun({
             text: typeof msg.text === "string" ? msg.text : JSON.stringify(msg.text, null, 2),
@@ -200,7 +200,7 @@ const ChatBot = () => {
   const renderChatBubbleContent = (msg) => {
     if (typeof msg.text === "object" && msg.text !== null) {
       if (msg.text.type === "output") return <div>{msg.text.value}</div>;
-      if (msg.text.type === "error") return <span style={{ color: "#b91c1c", fontWeight: 500 }}>{msg.text.value}</span>;
+      if (msg.text.type === "error") return <span style={{ color: "#b01c2e", fontWeight: 500 }}>{msg.text.value}</span>;
       return <pre>{JSON.stringify(msg.text.value, null, 2)}</pre>;
     }
     return (msg.text || "").split('\n').map((line, i) => (
@@ -209,7 +209,7 @@ const ChatBot = () => {
   };
 
   return (
-    <div style={{ background: 'linear-gradient(to bottom right, #f7faff, #e2ecf4)', minHeight: '100vh' }}>
+    <div className={darkMode ? "otsuka-dark" : ""} style={{ background: 'var(--otsuka-bg-gradient)', minHeight: '100vh' }}>
       <button
         className="chatbot-toggler modern-toggler"
         onClick={() => setIsOpen(!isOpen)}
@@ -234,8 +234,8 @@ const ChatBot = () => {
                 <button onClick={toggleTheme} title="Toggle theme" className="header-action-btn" aria-label="Toggle theme">
                   {darkMode ? (
                     <svg width="25" height="25" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="5" fill="#7c3aed" />
-                      <g stroke="#7c3aed" strokeWidth="2">
+                      <circle cx="12" cy="12" r="5" fill="#426BBA" />
+                      <g stroke="#426BBA" strokeWidth="2">
                         <line x1="12" y1="2" x2="12" y2="5" />
                         <line x1="12" y1="19" x2="12" y2="22" />
                         <line x1="4.22" y1="4.22" x2="6.34" y2="6.34" />
@@ -248,7 +248,7 @@ const ChatBot = () => {
                     </svg>
                   ) : (
                     <svg width="25" height="25" viewBox="0 0 24 24" fill="none">
-                      <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 0010.02 9.79z" fill="#7c3aed" />
+                      <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 0010.02 9.79z" fill="#426BBA" />
                     </svg>
                   )}
                 </button>
@@ -261,7 +261,7 @@ const ChatBot = () => {
                   className="header-action-btn"
                   aria-label="Clear chat"
                 >
-                  <svg width="25" height="25" fill="none" stroke="#7c3aed" strokeWidth="2.1" viewBox="0 0 24 24">
+                  <svg width="25" height="25" fill="none" stroke="#426BBA" strokeWidth="2.1" viewBox="0 0 24 24">
                     <path d="M4.93 4.93a10 10 0 1014.14 0M23 4v6h-6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
@@ -272,14 +272,14 @@ const ChatBot = () => {
                   aria-label={isExpanded ? 'Collapse window' : 'Expand window'}
                 >
                   {isExpanded ? (
-                    <svg width="25" height="25" fill="none" stroke="#7c3aed" strokeWidth="2.1" viewBox="0 0 24 24">
+                    <svg width="25" height="25" fill="none" stroke="#426BBA" strokeWidth="2.1" viewBox="0 0 24 24">
                       <polyline points="8 3 3 3 3 8" />
                       <line x1="3" y1="3" x2="10" y2="10" />
                       <polyline points="16 21 21 21 21 16" />
                       <line x1="21" y1="21" x2="14" y2="14" />
                     </svg>
                   ) : (
-                    <svg width="25" height="25" fill="none" stroke="#7c3aed" strokeWidth="2.1" viewBox="0 0 24 24">
+                    <svg width="25" height="25" fill="none" stroke="#426BBA" strokeWidth="2.1" viewBox="0 0 24 24">
                       <polyline points="15 3 21 3 21 9" />
                       <line x1="21" y1="3" x2="14" y2="10" />
                       <polyline points="9 21 3 21 3 15" />
@@ -357,15 +357,6 @@ const ChatBot = () => {
           </div>
           <footer
             className="chatbot-footer"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              position: "relative",
-              width: "100%",
-              minHeight: "40px",
-              padding: "8px 0",
-            }}
           >
             <button
               onClick={() => downloadSummaryDocx(messages)}
@@ -387,14 +378,15 @@ const ChatBot = () => {
               }}
             >
               <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
-                <path d="M12 16v-8M12 16l-4-4M12 16l4-4M4 20h16" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </footer>
-        </div>
-      )}
-    </div>
-  );
+                <path d="M12 16v-8M12 16l-4-4M12 16l4-4M4 20h16" stroke="#426BBA" strokeWidth="2
+" strokeLinecap="round" strokeLinejoin="round" />
+</svg>
+</button>
+</footer>
+</div>
+)}
+</div>
+);
 };
 
 export default ChatBot;
