@@ -101,6 +101,7 @@ const ChatBot = () => {
 
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [togglerAnimClass, setTogglerAnimClass] = useState('');
   const [darkMode, setDarkMode] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
@@ -108,6 +109,19 @@ const ChatBot = () => {
 
   const chatRef = useRef();
   const inputRef = useRef();
+
+  // --- Animation for toggler
+  useEffect(() => {
+    if (isOpen) {
+      setTogglerAnimClass('opening');
+      const timeout = setTimeout(() => setTogglerAnimClass(''), 230);
+      return () => clearTimeout(timeout);
+    } else {
+      setTogglerAnimClass('closed');
+      const timeout = setTimeout(() => setTogglerAnimClass(''), 230);
+      return () => clearTimeout(timeout);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
@@ -162,11 +176,15 @@ const ChatBot = () => {
         setIsTyping(true);
 
         let finalPrompt = assistant_message;
-        if (typeof finalPrompt === "string" && /^["“”'].*["“”']$/.test(finalPrompt.trim())) {
-          finalPrompt = finalPrompt.trim().replace(/^["“”']|["“”']$/g, "");
+        // Only extract the quoted query if "finalized" is true:
+        if (typeof finalPrompt === "string") {
+          const match = finalPrompt.match(/"(.*?)"/s); // The /s flag handles multi-line
+          if (match) {
+            finalPrompt = match[1];
+          }
         }
-
         let body = { statement: `CALL CUSTOM_AGENT2('${finalPrompt.replace(/'/g, "''")}')` };
+
         const snowflakeRes = await fetch('http://localhost:4000/api/snowflake', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -211,12 +229,55 @@ const ChatBot = () => {
   return (
     <div className={darkMode ? "otsuka-dark" : ""} style={{ background: 'var(--otsuka-bg-gradient)', minHeight: '100vh' }}>
       <button
-        className="chatbot-toggler modern-toggler"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-label="Toggle chatbot"
-        style={{ position: 'fixed', right: '20px', bottom: '20px', zIndex: 10000 }}>
-        {isOpen ? '✖' : <img src={ChatbotIcon} alt="Chatbot" style={{ width: 48, height: 48 }} />}
-      </button>
+  className={`chatbot-toggler modern-toggler ${togglerAnimClass}`}
+  onClick={() => setIsOpen(!isOpen)}
+  aria-label="Toggle chatbot"
+  style={{
+    position: 'fixed',
+    right: '20px',
+    bottom: '20px',
+    zIndex: 10000,
+    background: 'transparent',
+    border: 'none',
+    padding: 0,
+    outline: 'none',
+    boxShadow: 'none',
+    borderRadius: 0,
+    minWidth: 0,
+    minHeight: 0,
+    transition: "transform 0.25s cubic-bezier(.41,1.2,.5,1), opacity 0.23s cubic-bezier(.47,1.8,.7,.95)"
+  }}
+>
+  {isOpen ? (
+    <span style={{
+      fontSize: 44,
+      color: '#B01C2E',
+      fontWeight: 700,
+      lineHeight: 1,
+      background: 'transparent',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    }}>
+      ✖
+    </span>
+  ) : (
+    <img
+      src={ChatbotIcon}
+      alt="Chatbot"
+      className="chatbot-icon-animated"
+      style={{
+        height: 54,
+        width: 54,
+        display: 'block',
+        background: 'none',
+        border: 'none'
+      }}
+    />
+  )}
+</button>
+
+
       {isOpen && (
         <div
           className={
@@ -378,15 +439,15 @@ const ChatBot = () => {
               }}
             >
               <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
-                <path d="M12 16v-8M12 16l-4-4M12 16l4-4M4 20h16" stroke="#426BBA" strokeWidth="2
-" strokeLinecap="round" strokeLinejoin="round" />
-</svg>
-</button>
-</footer>
-</div>
-)}
-</div>
-);
+                <path d="M12 16v-8M12 16l-4-4M12 16l4-4M4 20h16" stroke="#426BBA" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </footer>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default ChatBot;

@@ -98,6 +98,8 @@ app.post('/api/snowflake', async (req, res) => {
   const { statement } = req.body;
   const token = generateSnowflakeJWT();
 
+   console.log("SQL sent to Snowflake:", statement);
+
   try {
     const sfRes = await fetch(SNOWFLAKE_URL, {
       method: 'POST',
