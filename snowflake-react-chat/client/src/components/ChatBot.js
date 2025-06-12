@@ -14,7 +14,6 @@ import {
 } from 'recharts';
 import { toPng } from 'html-to-image';
 
-// COLORS for group bars
 const COLORS = [
   "#426BBA", "#B01C2E", "#2ca02c", "#ff7f0e", "#d62728", "#9467bd", "#8c564b"
 ];
@@ -66,6 +65,19 @@ function TypingIndicator() {
       <span></span><span></span><span></span>
     </span>
   );
+}
+
+// --- PIVOT FUNCTION FOR GROUPED BAR CHARTS ---
+function pivotChartData(chartData, xKey, groupKey, yKey) {
+  // xKey: territory, groupKey: brand, yKey: trx
+  const allGroups = [...new Set(chartData.map(d => d[groupKey]))]; // all brands
+  const grouped = {};
+  chartData.forEach(row => {
+    const xVal = row[xKey];
+    if (!grouped[xVal]) grouped[xVal] = { [xKey]: xVal };
+    grouped[xVal][row[groupKey]] = row[yKey];
+  });
+  return { data: Object.values(grouped), groups: allGroups };
 }
 
 // --- DYNAMIC CHART KEY UTILITY ---
@@ -349,41 +361,78 @@ const ChatBot = () => {
   };
 
   // Render chat message bubble, registering ref to chart node for export
-  const renderChatBubbleContent = (msg, idx) => {
-    const isExpanded = expandedMessages[idx];
+const renderChatBubbleContent = (msg, idx) => {
+  const isExpanded = expandedMessages[idx];
 
-    if (typeof msg.text === 'string') {
-      try {
-        const parsed = JSON.parse(msg.text);
-        msg.text = parsed;
-      } catch {
-        return msg.text.split('\n').map((line, i) => <div key={i}>{line}</div>);
-      }
+  if (typeof msg.text === 'string') {
+    try {
+      const parsed = JSON.parse(msg.text);
+      msg.text = parsed;
+    } catch {
+      return msg.text.split('\n').map((line, i) => <div key={i}>{line}</div>);
+    }
+  }
+
+  if (typeof msg.text === 'object' && msg.text !== null) {
+    const { summary, keyInsights, interpretation, chartData, chartType, chartTitle, raw } = msg.text;
+
+    // Show ONLY summary if all chart/insight fields are null/empty/undefined (ignore interpretation)
+    if (
+      summary &&
+      (keyInsights === null || keyInsights === undefined) &&
+      (chartData === null || chartData === undefined) &&
+      (chartType === null || chartType === undefined) &&
+      (chartTitle === null || chartTitle === undefined)
+    ) {
+      return <div>{summary}</div>;
     }
 
-    if (typeof msg.text === 'object' && msg.text !== null) {
-      const { summary, keyInsights, interpretation, chartData, chartTitle, raw } = msg.text;
-      if (summary && raw) {
-        return (
-          <div>
-            <div style={{ marginBottom: '0.6rem', color: '#b91c1c' }}>{summary}</div>
-            <details style={{ marginTop: 8 }}>
-              <summary style={{cursor: 'pointer', color: '#666'}}>Show raw output (for troubleshooting)</summary>
-              <pre style={{ background: '#f4f4f4', color: '#222', padding: 12, borderRadius: 8, fontSize: 14, overflowX: 'auto' }}>
-                {raw}
-              </pre>
-            </details>
-          </div>
-        );
-      }
+    if (summary && raw) {
+      return (
+        <div>
+          <div style={{ marginBottom: '0.6rem', color: '#b91c1c' }}>{summary}</div>
+          <details style={{ marginTop: 8 }}>
+            <summary style={{ cursor: 'pointer', color: '#666' }}>Show raw output (for troubleshooting)</summary>
+            <pre style={{
+              background: '#f4f4f4',
+              color: '#222',
+              padding: 12,
+              borderRadius: 8,
+              fontSize: 14,
+              overflowX: 'auto'
+            }}>
+              {raw}
+            </pre>
+          </details>
+        </div>
+      );
+    }
 
-      if (summary && Array.isArray(keyInsights) && Array.isArray(chartData) && chartData.length > 0) {
-        // --- GROUPED BAR LOGIC ---
-        const { xKey, yKey, groupKey } = getChartKeys(chartData);
-        let groupValues = [];
-        if (groupKey) {
-          groupValues = [...new Set(chartData.map(d => d[groupKey]))];
-        }
+    if (summary && Array.isArray(keyInsights) && Array.isArray(chartData) && chartData.length > 0) {
+      // --- Chart detection logic
+      const sample = chartData[0];
+      const stringKeys = Object.keys(sample).filter(k => typeof sample[k] === "string");
+      const numberKeys = Object.keys(sample).filter(k => typeof sample[k] === "number");
+
+      // Grouped bar chart: 2 string keys, 1 number key
+      if (stringKeys.length >= 2 && numberKeys.length === 1) {
+        const xKey = stringKeys[0];
+        const groupKey = stringKeys[1];
+        const yKey = numberKeys[0];
+        // Pivot
+        const allGroups = [...new Set(chartData.map(d => d[groupKey]))];
+        const grouped = {};
+        chartData.forEach(row => {
+          const xVal = row[xKey];
+          if (!grouped[xVal]) grouped[xVal] = { [xKey]: xVal };
+          grouped[xVal][row[groupKey]] = row[yKey];
+        });
+        Object.values(grouped).forEach(row => {
+          allGroups.forEach(g => {
+            if (!(g in row)) row[g] = 0;
+          });
+        });
+        const pivotedData = Object.values(grouped);
 
         return (
           <div>
@@ -397,60 +446,146 @@ const ChatBot = () => {
               </>
             )}
             {interpretation && <div style={{ marginTop: '0.4rem' }}>{interpretation}</div>}
-            {xKey && yKey && (
+            {!isExpanded ? (
+              <button onClick={() => toggleExpanded(idx)} className="see-more-less-link" type="button">
+                See Chart ▼
+              </button>
+            ) : (
               <>
-                {!isExpanded ? (
-                  <button onClick={() => toggleExpanded(idx)} className="see-more-less-link" type="button">
-                    See Chart ▼
-                  </button>
-                ) : (
-                  <>
-                    {chartTitle && (
-                      <div style={{ fontWeight: 600, marginTop: '1rem', marginBottom: '0.3rem' }}>{chartTitle}</div>
-                    )}
-                    <div ref={el => { chartRefs.current[idx] = el; }}>
-                      <ResponsiveContainer width="100%" height={250}>
-                        <BarChart data={chartData}>
-                          <XAxis dataKey={xKey} />
-                          <YAxis />
-                          <RechartsTooltip />
-                          {groupKey ? (
-                            <>
-                              {groupValues.map((g, i) => (
-                                <Bar
-                                  key={g}
-                                  dataKey={yKey}
-                                  name={g}
-                                  fill={COLORS[i % COLORS.length]}
-                                  stackId={groupKey}
-                                  isAnimationActive={false}
-                                  data={chartData.filter(row => row[groupKey] === g)}
-                                />
-                              ))}
-                              <Legend />
-                            </>
-                          ) : (
-                            <Bar dataKey={yKey} fill="#426BBA" />
-                          )}
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <button onClick={() => toggleExpanded(idx)} className="see-more-less-link" type="button" style={{ marginTop: '0.8rem' }}>
-                      Close Chart ▲
-                    </button>
-                  </>
+                {chartTitle && (
+                  <div style={{ fontWeight: 600, marginTop: '1rem', marginBottom: '0.3rem' }}>{chartTitle}</div>
                 )}
+                <div ref={el => { chartRefs.current[idx] = el; }}>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={pivotedData}>
+                      <XAxis dataKey={xKey} />
+                      <YAxis />
+                      <RechartsTooltip />
+                      <Legend />
+                      {allGroups.map((group, i) => (
+                        <Bar key={group} dataKey={group} name={group} fill={COLORS[i % COLORS.length]} />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <button onClick={() => toggleExpanded(idx)} className="see-more-less-link" type="button" style={{ marginTop: '0.8rem' }}>
+                  Close Chart ▲
+                </button>
               </>
             )}
           </div>
         );
       }
+
+      // Dual/multi-axis: 1 string key, >=2 number keys
+      if (stringKeys.length === 1 && numberKeys.length >= 2) {
+        const xKey = stringKeys[0];
+        // First y-axis (bars)
+        const leftBars = numberKeys.slice(0, 1);
+        // Second y-axis (bars or line)
+        const rightBars = numberKeys.slice(1);
+
+        return (
+          <div>
+            <div style={{ marginBottom: '0.4rem' }}>{summary}</div>
+            {keyInsights.length > 0 && (
+              <>
+                <div style={{ marginTop: '0.6rem' }}><strong>Key Insights:</strong></div>
+                <ul style={{ paddingLeft: '1.2rem' }}>
+                  {keyInsights.map((insight, i) => <li key={i}>{insight}</li>)}
+                </ul>
+              </>
+            )}
+            {interpretation && <div style={{ marginTop: '0.4rem' }}>{interpretation}</div>}
+            {!isExpanded ? (
+              <button onClick={() => toggleExpanded(idx)} className="see-more-less-link" type="button">
+                See Chart ▼
+              </button>
+            ) : (
+              <>
+                {chartTitle && (
+                  <div style={{ fontWeight: 600, marginTop: '1rem', marginBottom: '0.3rem' }}>{chartTitle}</div>
+                )}
+                <div ref={el => { chartRefs.current[idx] = el; }}>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={chartData}>
+                      <XAxis dataKey={xKey} />
+                      <YAxis yAxisId="left" />
+                      <YAxis yAxisId="right" orientation="right" />
+                      <RechartsTooltip />
+                      <Legend />
+                      {/* Main bars */}
+                      {leftBars.map((key, i) => (
+                        <Bar yAxisId="left" key={key} dataKey={key} fill={COLORS[i % COLORS.length]} name={key} />
+                      ))}
+                      {/* Right axis bars */}
+                      {rightBars.map((key, i) => (
+                        <Bar yAxisId="right" key={key} dataKey={key} fill={COLORS[(i + 3) % COLORS.length]} name={key} />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <button onClick={() => toggleExpanded(idx)} className="see-more-less-link" type="button" style={{ marginTop: '0.8rem' }}>
+                  Close Chart ▲
+                </button>
+              </>
+            )}
+          </div>
+        );
+      }
+
+      // Single bar chart fallback
+      if (stringKeys.length === 1 && numberKeys.length === 1) {
+        const xKey = stringKeys[0];
+        const yKey = numberKeys[0];
+        return (
+          <div>
+            <div style={{ marginBottom: '0.4rem' }}>{summary}</div>
+            {keyInsights.length > 0 && (
+              <>
+                <div style={{ marginTop: '0.6rem' }}><strong>Key Insights:</strong></div>
+                <ul style={{ paddingLeft: '1.2rem' }}>
+                  {keyInsights.map((insight, i) => <li key={i}>{insight}</li>)}
+                </ul>
+              </>
+            )}
+            {interpretation && <div style={{ marginTop: '0.4rem' }}>{interpretation}</div>}
+            {!isExpanded ? (
+              <button onClick={() => toggleExpanded(idx)} className="see-more-less-link" type="button">
+                See Chart ▼
+              </button>
+            ) : (
+              <>
+                {chartTitle && (
+                  <div style={{ fontWeight: 600, marginTop: '1rem', marginBottom: '0.3rem' }}>{chartTitle}</div>
+                )}
+                <div ref={el => { chartRefs.current[idx] = el; }}>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={chartData}>
+                      <XAxis dataKey={xKey} />
+                      <YAxis />
+                      <RechartsTooltip />
+                      <Legend />
+                      <Bar dataKey={yKey} fill={COLORS[0]} name={yKey} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <button onClick={() => toggleExpanded(idx)} className="see-more-less-link" type="button" style={{ marginTop: '0.8rem' }}>
+                  Close Chart ▲
+                </button>
+              </>
+            )}
+          </div>
+        );
+      }
+      // Fallback: Only summary if chartData missing or not matching above
       if (summary) {
         return <div>{summary}</div>;
       }
     }
-    return <pre>{JSON.stringify(msg.text, null, 2)}</pre>;
-  };
+  }
+  return <pre>{JSON.stringify(msg.text, null, 2)}</pre>;
+};
 
   return (
     <div className={darkMode ? "otsuka-dark" : ""} style={{ background: 'var(--otsuka-bg-gradient)', minHeight: '100vh' }}>
