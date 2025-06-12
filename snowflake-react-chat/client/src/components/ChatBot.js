@@ -1,8 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/style.css';
 import ChatbotIcon from '../assets/chatbot-toggler.png';
-import { Document, Packer, Paragraph, TextRun } from "docx";
+import { Document, Packer, Paragraph, TextRun, ImageRun } from "docx";
 import { saveAs } from "file-saver";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  Legend
+} from 'recharts';
+import { toPng } from 'html-to-image';
+
+// COLORS for group bars
+const COLORS = [
+  "#426BBA", "#B01C2E", "#2ca02c", "#ff7f0e", "#d62728", "#9467bd", "#8c564b"
+];
 
 const HARDCODED_ANSWERS = {
   "where can i find top 10 gainer prescriber over time?": "Top 10 Gainer Prescribers can be found in the Performance Dossier.",
@@ -53,43 +68,21 @@ function TypingIndicator() {
   );
 }
 
-// === Downloads the chat as-is ===
-async function downloadSummaryDocx(messages) {
-  const docChildren = [
-    new Paragraph({
-      children: [
-        new TextRun({ text: "Field Insights Assistant - Full Chat Transcript", bold: true, size: 36 }),
-        new TextRun({ text: "\n\n" }),
-      ]
-    }),
-  ];
+// --- DYNAMIC CHART KEY UTILITY ---
+function getChartKeys(chartData) {
+  if (!Array.isArray(chartData) || chartData.length === 0) return { xKey: null, yKey: null, groupKey: null };
+  const sample = chartData[0];
+  const stringKeys = Object.keys(sample).filter(
+    key => typeof sample[key] === "string"
+  );
+  const numberKeys = Object.keys(sample).filter(
+    key => typeof sample[key] === "number"
+  );
 
-  messages.forEach((msg) => {
-    if (!msg || !msg.role || !msg.text) return;
-    docChildren.push(
-      new Paragraph({
-        spacing: { after: 80 },
-        children: [
-          new TextRun({
-            text: msg.role === "user" ? "User: " : "Assistant: ",
-            bold: true,
-            color: msg.role === "user" ? "426BBA" : "373D42"
-          }),
-          new TextRun({
-            text: typeof msg.text === "string" ? msg.text : JSON.stringify(msg.text, null, 2),
-            color: "22223b",
-          })
-        ]
-      })
-    );
-  });
-
-  const doc = new Document({
-    sections: [{ properties: {}, children: docChildren }]
-  });
-
-  const blob = await Packer.toBlob(doc);
-  saveAs(blob, `chat-transcript-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.docx`);
+  let xKey = stringKeys[0] || null;
+  let groupKey = stringKeys[1] || null;
+  let yKey = numberKeys[0] || null;
+  return { xKey, yKey, groupKey };
 }
 
 const ChatBot = () => {
@@ -102,15 +95,18 @@ const ChatBot = () => {
   const [input, setInput] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [togglerAnimClass, setTogglerAnimClass] = useState('');
+  const [isIconAnimated, setIsIconAnimated] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'info', visible: false });
   const [isTyping, setIsTyping] = useState(false);
 
+  // For mapping chart messages to their rendered DOM nodes
+  const chartRefs = useRef({});
+
   const chatRef = useRef();
   const inputRef = useRef();
 
-  // --- Animation for toggler
   useEffect(() => {
     if (isOpen) {
       setTogglerAnimClass('opening');
@@ -121,6 +117,17 @@ const ChatBot = () => {
       const timeout = setTimeout(() => setTogglerAnimClass(''), 230);
       return () => clearTimeout(timeout);
     }
+  }, [isOpen]);
+
+  useEffect(() => {
+    let timeout;
+    if (!isOpen && isIconAnimated) {
+      timeout = setTimeout(() => setIsIconAnimated(false), 4000);
+    }
+    return () => clearTimeout(timeout);
+  }, [isOpen, isIconAnimated]);
+  useEffect(() => {
+    if (!isOpen) setIsIconAnimated(true);
   }, [isOpen]);
 
   useEffect(() => {
@@ -142,13 +149,89 @@ const ChatBot = () => {
     }
   }, [toast.visible]);
 
-  // ----------- MAIN LOGIC ----------------
+  // Chart image grab for export
+  async function getChartImage(idx) {
+    const chartEl = chartRefs.current[idx];
+    if (!chartEl) return null;
+    try {
+      const dataUrl = await toPng(chartEl);
+      return dataUrl.split(',')[1];
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function downloadSummaryDocx(messages) {
+    const docChildren = [
+      new Paragraph({
+        children: [
+          new TextRun({ text: "Field Insights Assistant - Full Chat Transcript", bold: true, size: 36 }),
+          new TextRun({ text: "\n\n" }),
+        ]
+      }),
+    ];
+
+    for (let idx = 0; idx < messages.length; idx++) {
+      const msg = messages[idx];
+      if (!msg || !msg.role || !msg.text) continue;
+
+      // Add the message text
+      docChildren.push(
+        new Paragraph({
+          spacing: { after: 80 },
+          children: [
+            new TextRun({
+              text: msg.role === "user" ? "User: " : "Assistant: ",
+              bold: true,
+              color: msg.role === "user" ? "426BBA" : "373D42"
+            }),
+            new TextRun({
+              text: typeof msg.text === "string"
+                ? msg.text
+                : (msg.text.summary || JSON.stringify(msg.text, null, 2)),
+              color: "22223b",
+            })
+          ]
+        })
+      );
+
+      // If this message has chartData, add the chart image
+      if (
+        typeof msg.text === "object" &&
+        msg.text !== null &&
+        msg.text.chartData &&
+        Array.isArray(msg.text.chartData) &&
+        msg.text.chartData.length > 0
+      ) {
+        const base64 = await getChartImage(idx);
+        if (base64) {
+          docChildren.push(
+            new Paragraph({
+              children: [
+                new ImageRun({
+                  data: Uint8Array.from(atob(base64), c => c.charCodeAt(0)),
+                  transformation: { width: 540, height: 220 },
+                }),
+              ]
+            })
+          );
+        }
+      }
+    }
+
+    const doc = new Document({
+      sections: [{ properties: {}, children: docChildren }]
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `chat-transcript-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.docx`);
+  }
+
   const handleSendMessage = async (userMessage) => {
     if (!userMessage || typeof userMessage !== "string" || !userMessage.trim()) return;
     setInput('');
     setIsTyping(true);
 
-    // HARDCODED ANSWERS (instant, no LLM)
     const cleaned = userMessage.trim().toLowerCase();
     const matchedKey = Object.keys(HARDCODED_ANSWERS).find(k => cleaned.includes(k));
     if (matchedKey) {
@@ -159,7 +242,6 @@ const ChatBot = () => {
       return;
     }
 
-    // Always send message to clarify endpoint
     const updatedMessages = [...messages, { role: 'user', text: userMessage }];
     setMessages(updatedMessages);
 
@@ -176,14 +258,21 @@ const ChatBot = () => {
         setIsTyping(true);
 
         let finalPrompt = assistant_message;
-        // Only extract the quoted query if "finalized" is true:
         if (typeof finalPrompt === "string") {
-          const match = finalPrompt.match(/"(.*?)"/s); // The /s flag handles multi-line
+          const match = finalPrompt.match(/"(.*?)"/s);
           if (match) {
             finalPrompt = match[1];
           }
         }
-        let body = { statement: `CALL CUSTOM_AGENT2('${finalPrompt.replace(/'/g, "''")}')` };
+
+        finalPrompt = finalPrompt
+          .replace(/[\n\r]+/g, ' ')
+          .replace(/[,;:]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .replace(/'/g, "''");
+
+        let body = { statement: `CALL CUSTOM_AGENT2('${finalPrompt}')` };
 
         const snowflakeRes = await fetch('http://localhost:4000/api/snowflake', {
           method: 'POST',
@@ -192,14 +281,53 @@ const ChatBot = () => {
         });
         const responseText = await snowflakeRes.text();
 
+        const formatted = formatSnowflakeResponse(responseText);
+
+        let beautified = formatted.value;
+        try {
+          const beautifyRes = await fetch('http://localhost:4000/api/beautify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: finalPrompt,
+              snowflakeOutput: formatted.value
+            })
+          });
+
+          const { output } = await beautifyRes.json();
+
+          // Log beautify output for debugging!
+          console.log('Beautify Agent Response:', output);
+
+          let cleanOutput = output;
+          if (typeof output === 'string') {
+            cleanOutput = output
+              .replace(/^```json\s*/i, '')
+              .replace(/^```\s*/i, '')
+              .replace(/\s*```$/, '')
+              .replace(/[\r\n]+$/, '')
+              .trim();
+          }
+          try {
+            beautified = JSON.parse(cleanOutput);
+          } catch (e) {
+            console.error("Beautify output was invalid JSON (see below):\n", cleanOutput);
+            beautified = {
+              summary: "Sorry, the server returned incomplete data. Please try again or contact support.",
+              raw: cleanOutput
+            };
+          }
+        } catch (e) {
+          beautified = { summary: String(e.message || "Failed to beautify output.") };
+        }
+
         setIsTyping(false);
 
-        // Only show "output" from response
-        const formatted = formatSnowflakeResponse(responseText);
         setMessages(prev => [
           ...prev,
-          { role: "assistant", text: formatted.value || "No response." }
+          { role: "assistant", text: beautified }
         ]);
+
         return;
       } else {
         setIsTyping(false);
@@ -215,68 +343,165 @@ const ChatBot = () => {
 
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  const renderChatBubbleContent = (msg) => {
-    if (typeof msg.text === "object" && msg.text !== null) {
-      if (msg.text.type === "output") return <div>{msg.text.value}</div>;
-      if (msg.text.type === "error") return <span style={{ color: "#b01c2e", fontWeight: 500 }}>{msg.text.value}</span>;
-      return <pre>{JSON.stringify(msg.text.value, null, 2)}</pre>;
+  const [expandedMessages, setExpandedMessages] = useState({});
+  const toggleExpanded = (index) => {
+    setExpandedMessages(prev => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  // Render chat message bubble, registering ref to chart node for export
+  const renderChatBubbleContent = (msg, idx) => {
+    const isExpanded = expandedMessages[idx];
+
+    if (typeof msg.text === 'string') {
+      try {
+        const parsed = JSON.parse(msg.text);
+        msg.text = parsed;
+      } catch {
+        return msg.text.split('\n').map((line, i) => <div key={i}>{line}</div>);
+      }
     }
-    return (msg.text || "").split('\n').map((line, i) => (
-      <div key={i}>{line}</div>
-    ));
+
+    if (typeof msg.text === 'object' && msg.text !== null) {
+      const { summary, keyInsights, interpretation, chartData, chartTitle, raw } = msg.text;
+      if (summary && raw) {
+        return (
+          <div>
+            <div style={{ marginBottom: '0.6rem', color: '#b91c1c' }}>{summary}</div>
+            <details style={{ marginTop: 8 }}>
+              <summary style={{cursor: 'pointer', color: '#666'}}>Show raw output (for troubleshooting)</summary>
+              <pre style={{ background: '#f4f4f4', color: '#222', padding: 12, borderRadius: 8, fontSize: 14, overflowX: 'auto' }}>
+                {raw}
+              </pre>
+            </details>
+          </div>
+        );
+      }
+
+      if (summary && Array.isArray(keyInsights) && Array.isArray(chartData) && chartData.length > 0) {
+        // --- GROUPED BAR LOGIC ---
+        const { xKey, yKey, groupKey } = getChartKeys(chartData);
+        let groupValues = [];
+        if (groupKey) {
+          groupValues = [...new Set(chartData.map(d => d[groupKey]))];
+        }
+
+        return (
+          <div>
+            <div style={{ marginBottom: '0.4rem' }}>{summary}</div>
+            {keyInsights.length > 0 && (
+              <>
+                <div style={{ marginTop: '0.6rem' }}><strong>Key Insights:</strong></div>
+                <ul style={{ paddingLeft: '1.2rem' }}>
+                  {keyInsights.map((insight, i) => <li key={i}>{insight}</li>)}
+                </ul>
+              </>
+            )}
+            {interpretation && <div style={{ marginTop: '0.4rem' }}>{interpretation}</div>}
+            {xKey && yKey && (
+              <>
+                {!isExpanded ? (
+                  <button onClick={() => toggleExpanded(idx)} className="see-more-less-link" type="button">
+                    See Chart ▼
+                  </button>
+                ) : (
+                  <>
+                    {chartTitle && (
+                      <div style={{ fontWeight: 600, marginTop: '1rem', marginBottom: '0.3rem' }}>{chartTitle}</div>
+                    )}
+                    <div ref={el => { chartRefs.current[idx] = el; }}>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={chartData}>
+                          <XAxis dataKey={xKey} />
+                          <YAxis />
+                          <RechartsTooltip />
+                          {groupKey ? (
+                            <>
+                              {groupValues.map((g, i) => (
+                                <Bar
+                                  key={g}
+                                  dataKey={yKey}
+                                  name={g}
+                                  fill={COLORS[i % COLORS.length]}
+                                  stackId={groupKey}
+                                  isAnimationActive={false}
+                                  data={chartData.filter(row => row[groupKey] === g)}
+                                />
+                              ))}
+                              <Legend />
+                            </>
+                          ) : (
+                            <Bar dataKey={yKey} fill="#426BBA" />
+                          )}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <button onClick={() => toggleExpanded(idx)} className="see-more-less-link" type="button" style={{ marginTop: '0.8rem' }}>
+                      Close Chart ▲
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        );
+      }
+      if (summary) {
+        return <div>{summary}</div>;
+      }
+    }
+    return <pre>{JSON.stringify(msg.text, null, 2)}</pre>;
   };
 
   return (
     <div className={darkMode ? "otsuka-dark" : ""} style={{ background: 'var(--otsuka-bg-gradient)', minHeight: '100vh' }}>
       <button
-  className={`chatbot-toggler modern-toggler ${togglerAnimClass}`}
-  onClick={() => setIsOpen(!isOpen)}
-  aria-label="Toggle chatbot"
-  style={{
-    position: 'fixed',
-    right: '20px',
-    bottom: '20px',
-    zIndex: 10000,
-    background: 'transparent',
-    border: 'none',
-    padding: 0,
-    outline: 'none',
-    boxShadow: 'none',
-    borderRadius: 0,
-    minWidth: 0,
-    minHeight: 0,
-    transition: "transform 0.25s cubic-bezier(.41,1.2,.5,1), opacity 0.23s cubic-bezier(.47,1.8,.7,.95)"
-  }}
->
-  {isOpen ? (
-    <span style={{
-      fontSize: 44,
-      color: '#B01C2E',
-      fontWeight: 700,
-      lineHeight: 1,
-      background: 'transparent',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}>
-      ✖
-    </span>
-  ) : (
-    <img
-      src={ChatbotIcon}
-      alt="Chatbot"
-      className="chatbot-icon-animated"
-      style={{
-        height: 54,
-        width: 54,
-        display: 'block',
-        background: 'none',
-        border: 'none'
-      }}
-    />
-  )}
-</button>
-
+        className={`chatbot-toggler modern-toggler ${togglerAnimClass}`}
+        onClick={() => setIsOpen(!isOpen)}
+        aria-label="Toggle chatbot"
+        style={{
+          position: 'fixed',
+          right: '20px',
+          bottom: '20px',
+          zIndex: 10000,
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          outline: 'none',
+          boxShadow: 'none',
+          borderRadius: 0,
+          minWidth: 0,
+          minHeight: 0,
+          transition: "transform 0.25s cubic-bezier(.41,1.2,.5,1), opacity 0.23s cubic-bezier(.47,1.8,.7,.95)"
+        }}
+      >
+        {isOpen ? (
+          <span style={{
+            fontSize: 44,
+            color: '#B01C2E',
+            fontWeight: 700,
+            lineHeight: 1,
+            background: 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            ✖
+          </span>
+        ) : (
+          <img
+            src={ChatbotIcon}
+            alt="Chatbot"
+            className={isIconAnimated ? "chatbot-icon-animated" : ""}
+            style={{
+              height: 54,
+              width: 54,
+              display: 'block',
+              background: 'none',
+              border: 'none'
+            }}
+          />
+        )}
+      </button>
 
       {isOpen && (
         <div
@@ -359,7 +584,7 @@ const ChatBot = () => {
                 style={{ justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}
               >
                 <div className={`chat-bubble ${msg.role}`}>
-                  {renderChatBubbleContent(msg)}
+                  {renderChatBubbleContent(msg, idx)}
                 </div>
               </li>
             ))}
@@ -378,7 +603,6 @@ const ChatBot = () => {
               value={input}
               onChange={e => {
                 setInput(e.target.value);
-                // Auto resize
                 const el = e.target;
                 el.style.height = "auto";
                 el.style.height = Math.min(el.scrollHeight, 110) + "px";

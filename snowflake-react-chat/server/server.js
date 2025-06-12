@@ -544,6 +544,108 @@ Summary:
   }
 });
 
+// ====== BEAUTIFY SNOWFLAKE OUTPUT ROUTE ======
+app.post('/api/beautify', async (req, res) => {
+  try {
+    const { prompt, snowflakeOutput } = req.body;
+
+const beautifyPrompt = `
+You are a professional assistant that summarizes Snowflake CortexAI outputs in business-friendly language and prepares chart-ready data.
+
+Given:
+1. The user's natural language request:
+"${prompt}"
+
+2. The raw output from Snowflake:
+"""${snowflakeOutput}"""
+
+You must return:
+
+1. If there is only one KPI or data point in the snowflake output. Then below is the format for the response.
+
+- A clear 1-line summary of what the data shows.
+- A "Key Insights" section with bullet points of different grains in data.
+- A 1-line interpretation/conclusion of trends.
+- A chart-ready JSON array can be null.
+- A "chartType" (e.g., bar, pie) and a "chartTitle" can be null.
+- Return the full response as a JSON object with keys: summary, keyInsights, interpretation, chartData, chartType, chartTitle.
+
+Example Response Format (strictly return JSON like this):
+{
+  "summary": "The TRx sales volume for Axanol brands in Miami S FL over the last 17 weeks is 1,026",
+  "keyInsights": null,
+  "interpretation": "The 65+ segment is consistently dominant across all brands, especially in the Retail channel.",
+  "chartData": null,
+  "chartType": null,
+  "chartTitle": null
+}
+
+2. If there is only one KPI and multiple data point in the snowflake output which can be used to chart data. Then below is the format for the response.
+- A clear 1-line summary of what the data shows.
+- A "Key Insights" section with bullet points by brand (include channel, age group, and TRx values).
+- A 1-line interpretation/conclusion of trends.
+- A chart-ready JSON array called "chartData" with keys like brand, channel, ageGroup, and trx.
+- A "chartType" (e.g., bar, pie) and a "chartTitle".
+- Return the full response as a JSON object with keys: summary, keyInsights, interpretation, chartData, chartType, chartTitle.
+
+Example 1 Response Format (strictly return JSON like this):
+{
+  "summary": "The TRx sales volume across brands in Miami S FL over the last 17 weeks shows distinct age-group and channel differences.",
+  "keyInsights": [
+    "AXANOL: Retail (65+): 1,026; Retail (18-64): 267; LTC (65+): 81; LTC (18-64): 9",
+    "ELIPRAX: Retail (65+): 550; Retail (18-64): 44; LTC (65+): 71; LTC (18-64): 3",
+    ...
+  ],
+  "interpretation": "The 65+ segment is consistently dominant across all brands, especially in the Retail channel.",
+  "chartData": [
+    { "brand": "AXANOL", "channel": "Retail", "ageGroup": "65+", "trx": 1026 },
+    { "brand": "AXANOL", "channel": "Retail", "ageGroup": "18-64", "trx": 267 },
+    ...
+  ],
+  "chartType": "bar",
+  "chartTitle": "TRx Volume by Brand, Channel, and Age Group"
+}
+
+Example 2 Response Format (strictly return JSON like this):
+{
+  "summary": "The TRx Market Share across brands in Miami S FL over the last 17 weeks shows distinct age-group and channel differences.",
+  "keyInsights": [
+    "AXANOL: Retail (65+): 1,026; Retail (18-64): 267; LTC (65+): 81; LTC (18-64): 9",
+    "ELIPRAX: Retail (65+): 550; Retail (18-64): 44; LTC (65+): 71; LTC (18-64): 3",
+    ...
+  ],
+  "interpretation": "The 65+ segment is consistently dominant across all brands, especially in the Retail channel.",
+  "chartData": [
+    { "brand": "AXANOL", "channel": "Retail", "ageGroup": "65+", "trx": 1026 },
+    { "brand": "AXANOL", "channel": "Retail", "ageGroup": "18-64", "trx": 267 },
+    ...
+  ],
+  "chartType": "pie",
+  "chartTitle": "TRx Market Share by Brand, Channel, and Age Group"
+}
+
+**********NEVER RETURN INCOMPLETE JSON OR INVALID JSON**********
+`;
+
+    console.log("===== Chat Text sent to LLM for beutification =====\n" + snowflakeOutput + "\n===== END =====");
+
+    const beautifyRes = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You rewrite raw data into natural language insights for pharma sales teams." },
+        { role: "user", content: beautifyPrompt }
+      ],
+      temperature: 0.4,
+      max_tokens: 4096
+    });
+
+    const output = beautifyRes.choices[0].message.content.trim();
+    return res.json({ output });
+  } catch (err) {
+    console.error("Error in /api/beautify:", err);
+    res.status(500).json({ output: "Sorry, I couldn't format the response." });
+  }
+});
 
 // ====== HEALTHCHECK ROUTE ======
 app.get('/test', (req, res) => res.send("SERVER FILE IS RUNNING!"));

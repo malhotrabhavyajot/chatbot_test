@@ -59,7 +59,7 @@ body {
 
 /* === HEADER === */
 .chatbot-header {
-  background: linear-gradient(90deg, #B4C9EA 80%, #426BBA 100%) !important;
+  /* background: linear-gradient(90deg, #B4C9EA 80%, #426BBA 100%) !important; */
   color: #fff;
   font-weight: 600;
   font-size: 19px;
@@ -202,19 +202,19 @@ body {
   border: 1.1px solid #f3f4fa;
   position: relative;
 }
-.chat-bubble.user {
-  background: #426BBA;
-  color: #fff;
-  box-shadow: 0 6px 22px #426bba15;
-  border: 1.2px solid #426BBA;
-}
+  .chat-bubble.user {
+    background: #426BBA;
+    color: #fff;
+    box-shadow: 0 6px 22px #426bba15;
+    border: 1.2px solid #426BBA;
+  }
 
-.chat-bubble.assistant {
-  background: #B4C9EA;
-  color: #373D42;
-  box-shadow: 0 6px 22px #b4c9ea13;
-  border: 1.2px solid #B4C9EA;
-}
+  .chat-bubble.assistant {
+    background: #B4C9EA;
+    color: #373D42;
+    box-shadow: 0 6px 22px #b4c9ea13;
+    border: 1.2px solid #B4C9EA;
+  }
 
 .chat-bubble.assistant:hover {
   background: #c9ddfa;
@@ -550,7 +550,7 @@ body {
   padding: 11px 0 16px 0;
   font-size: 15px;
   color: var(--otsuka-blue);
-  background: linear-gradient(90deg, #B4C9EA 60%, #426BBA 100%) !important;
+  /* background: linear-gradient(90deg, #B4C9EA 60%, #426BBA 100%) !important; */
   font-weight: 500;
   min-height: 38px;
   border-top: 1.4px solid var(--otsuka-blue);
@@ -725,6 +725,23 @@ body {
 }
 
 .chatbot-icon-animated {
-  animation: chatbot-bounce 1.8s infinite cubic-bezier(.36,1.7,.72,.97);
+  animation: chatbot-bounce 2s infinite cubic-bezier(.36,1.7,.72,.97);
   will-change: transform;
+}
+
+
+.see-more-less-link {
+  background: none;
+  border: none;
+  color: #b01c2e;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-top: 0.2rem;
+  margin-bottom: 0rem;
+}
+.see-more-less-link:hover {
+  text-decoration: underline dotted;
+  color: #2267b6; /* Otsuka red for hover if desired */
 }
