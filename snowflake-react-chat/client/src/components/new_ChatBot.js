@@ -12,39 +12,8 @@ const HARDCODED_ANSWERS = {
   "where can i find explanations about different kpis?": "Explanations and Calculation of each and every KPI can be found in the Glossary dossier.",
   "what is mkt % lis?": "Mkt % LIS is the Percentage of claims where claim type is 'PAID' and channel is 'Medicare' and 'Medicare D', and OPC = $0 - $12 and LIS patient flag = LIS-DE, LIS LTC, LIS-NON-DE, LIS-UNKNOWN for Rolling 3M.",
   "which universes do we show in accounts calculation?": "We show three universes Veeva Aligned, Call Plan/DMCP and a combined Veeva Aligned + Call Plan/DMCP universes.",
-  "where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier.",
-  // "show trx sales for axanol brand in all territories within the miami ecosystem for the recent 17 weeks.":"The TRx sales for the Axanol brand in all territories within the Miami ecosystem for the recent 17 weeks are as follows - MIAMI W FL: 2681 - MIAMI S FL: 1383 - SARASOTA FL: 1241 - MIAMI N FL: 1055 - FORT LAUDERDALE FL: 886 - WEST PALM BEACH FL: 872"
+  "where can i find trx sales trends overtime?": "The sales trends for Retail and Non Retail sales can be found in the Performance Dossier."
 };
-
-function formatSnowflakeResponse(responseText) {
-  try {
-    let json = typeof responseText === 'string' ? JSON.parse(responseText) : responseText;
-    if (
-      Array.isArray(json.data) &&
-      json.data.length > 0 &&
-      Array.isArray(json.data[0]) &&
-      typeof json.data[0][0] === 'string' &&
-      json.data[0][0].trim().startsWith('{')
-    ) {
-      const inner = JSON.parse(json.data[0][0]);
-      if (inner.output) return { type: "output", value: inner.output };
-      return { type: "output", value: JSON.stringify(inner, null, 2) };
-    }
-    if (json.output) return { type: "output", value: json.output };
-    if (json.error) return { type: "error", value: "❌ Error: " + json.error };
-    if (
-      json.code &&
-      json.code !== "000000" &&
-      (!json.message || !json.message.toLowerCase().includes("executed successfully"))
-    ) {
-      return { type: "error", value: `❌ Error: ${json.code} - ${json.message}` };
-    }
-    if (json.message) return { type: "output", value: json.message };
-    return { type: "output", value: "No data found." };
-  } catch {
-    return { type: "error", value: responseText || "No response from backend." };
-  }
-}
 
 function TypingIndicator() {
   return (
@@ -54,7 +23,6 @@ function TypingIndicator() {
   );
 }
 
-// === Downloads the chat as-is ===
 async function downloadSummaryDocx(messages) {
   const docChildren = [
     new Paragraph({
@@ -111,7 +79,6 @@ const ChatBot = () => {
   const chatRef = useRef();
   const inputRef = useRef();
 
-  // --- Animation for toggler
   useEffect(() => {
     if (isOpen) {
       setTogglerAnimClass('opening');
@@ -160,53 +127,95 @@ const ChatBot = () => {
       return;
     }
 
-    // Always send message to clarify endpoint
-    const updatedMessages = [...messages, { role: 'user', text: userMessage }];
-    setMessages(updatedMessages);
+    // Show user's message in chat
+    setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
 
     try {
-      const response = await fetch('http://localhost:4000/api/clarify', {
+      // 1. Clarify agent
+      const clarifyRes = await fetch('http://localhost:5100/api/clarify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userMessage })
       });
-      const { assistant_message, finalized } = await response.json();
+      const { assistant_message, finalized } = await clarifyRes.json();
 
-      if (finalized) {
-        setMessages(prev => [...prev, { role: 'assistant', text: assistant_message }]);
-        setIsTyping(true);
+      setIsTyping(false);
+      setMessages(prev => [...prev, { role: 'assistant', text: assistant_message }]);
 
-        let finalPrompt = assistant_message;
-        // Only extract the quoted query if "finalized" is true:
-        if (typeof finalPrompt === "string") {
-          const match = finalPrompt.match(/"(.*?)"/s); // The /s flag handles multi-line
-          if (match) {
-            finalPrompt = match[1];
-          }
-        }
-        let body = { statement: `CALL CUSTOM_AGENT2('${finalPrompt.replace(/'/g, "''")}')` };
-
-        const snowflakeRes = await fetch('http://localhost:4000/api/snowflake', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-        const responseText = await snowflakeRes.text();
-
-        setIsTyping(false);
-
-        // Only show "output" from response
-        const formatted = formatSnowflakeResponse(responseText);
-        setMessages(prev => [
-          ...prev,
-          { role: "assistant", text: formatted.value || "No response." }
-        ]);
-        return;
-      } else {
-        setIsTyping(false);
-        setMessages(prev => [...prev, { role: 'assistant', text: assistant_message }]);
+      if (!finalized) {
+        // Wait for next user input (clarification step)
         return;
       }
+
+      // 2. Parse the finalized query from clarify
+      let finalizedPrompt = assistant_message;
+      const match = finalizedPrompt.match(/"(.*?)"/s);
+      if (match) finalizedPrompt = match[1];
+
+      // 3. Prepare Analyst API input
+      const analystBody = {
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: finalizedPrompt }
+            ]
+          }
+        ],
+        prompt: finalizedPrompt, // Used for beautify step
+        semantic_model_file: "@CHATBOT_DEMO.CHATBOT_METADATA.STAGE_1/cortex_chatbot.yaml"
+      };
+
+      setIsTyping(true);
+
+      // 4. Call Cortex Analyst pipeline (includes beautification)
+      const analystRes = await fetch('http://localhost:5100/api/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(analystBody)
+      });
+      const { beautified } = await analystRes.json();
+
+      setIsTyping(false);
+
+      // 5. Show beautified output
+      // --- Core: Extract summary/insights/interpretation and create a chat string ---
+      let beautifiedObj = beautified;
+      if (beautified && typeof beautified === "string") {
+        try {
+          beautifiedObj = JSON.parse(beautified);
+        } catch {
+          beautifiedObj = { summary: beautified };
+        }
+      }
+      if (!beautifiedObj || (typeof beautifiedObj === "string" && !beautifiedObj.trim())) {
+        beautifiedObj = { summary: "Sorry, no data was returned from the server." };
+      }
+      let chatBubbleString = '';
+      if (beautifiedObj && typeof beautifiedObj === 'object') {
+        if (beautifiedObj.summary) chatBubbleString += beautifiedObj.summary + '\n\n';
+        if (Array.isArray(beautifiedObj.keyInsights) && beautifiedObj.keyInsights.length > 0) {
+          chatBubbleString += beautifiedObj.keyInsights.map(item => '• ' + item).join('\n') + '\n\n';
+        }
+        if (beautifiedObj.interpretation) chatBubbleString += beautifiedObj.interpretation;
+      } else if (typeof beautifiedObj === 'string') {
+        chatBubbleString = beautifiedObj;
+      }
+      chatBubbleString = chatBubbleString.trim();
+
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", text: chatBubbleString }
+      ]);
+      localStorage.setItem(
+        'chatMessages',
+        JSON.stringify([
+          ...messages,
+          { role: 'user', text: userMessage },
+          { role: 'assistant', text: assistant_message },
+          { role: 'assistant', text: chatBubbleString }
+        ])
+      );
     } catch (error) {
       setIsTyping(false);
       setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I couldn't process your query. Please try again." }]);
@@ -216,68 +225,109 @@ const ChatBot = () => {
 
   const toggleTheme = () => setDarkMode(prev => !prev);
 
-  const renderChatBubbleContent = (msg) => {
-    if (typeof msg.text === "object" && msg.text !== null) {
-      if (msg.text.type === "output") return <div>{msg.text.value}</div>;
-      if (msg.text.type === "error") return <span style={{ color: "#b01c2e", fontWeight: 500 }}>{msg.text.value}</span>;
-      return <pre>{JSON.stringify(msg.text.value, null, 2)}</pre>;
+const renderChatBubbleContent = (msg) => {
+  // Handle beautified response as an object
+  if (typeof msg.text === "object" && msg.text !== null) {
+    const { summary, keyInsights, interpretation } = msg.text;
+
+    return (
+      <div style={{ whiteSpace: "pre-line" }}>
+        {summary && <div style={{ marginBottom: keyInsights || interpretation ? 8 : 0 }}>{summary}</div>}
+        {Array.isArray(keyInsights) && keyInsights.length > 0 && (
+          <ul style={{ paddingLeft: 18, marginBottom: 8 }}>
+            {keyInsights.map((item, i) => <li key={i}>{item}</li>)}
+          </ul>
+        )}
+        {interpretation && <div style={{ marginTop: 8, color: "#666" }}>{interpretation}</div>}
+      </div>
+    );
+  }
+
+  // If text is a JSON string, try to parse and handle same as above
+  if (typeof msg.text === "string") {
+    let parsed = null;
+    try {
+      let cleaned = msg.text.replace(/^```json|^```|```$/g, "").trim();
+      parsed = JSON.parse(cleaned);
+    } catch {
+      parsed = null;
     }
-    return (msg.text || "").split('\n').map((line, i) => (
-      <div key={i}>{line}</div>
-    ));
-  };
+    if (parsed && typeof parsed === "object") {
+      const { summary, keyInsights, interpretation } = parsed;
+      return (
+        <div style={{ whiteSpace: "pre-line" }}>
+          {summary && <div style={{ marginBottom: keyInsights || interpretation ? 8 : 0 }}>{summary}</div>}
+          {Array.isArray(keyInsights) && keyInsights.length > 0 && (
+            <ul style={{ paddingLeft: 18, marginBottom: 8 }}>
+              {keyInsights.map((item, i) => <li key={i}>{item}</li>)}
+            </ul>
+          )}
+          {interpretation && <div style={{ marginTop: 8, color: "#666" }}>{interpretation}</div>}
+        </div>
+      );
+    }
+    // Fallback: render as plain text
+    return msg.text.split('\n').map((line, i) => <div key={i}>{line}</div>);
+  }
+
+  // Final fallback
+  return <div>{String(msg.text)}</div>;
+};
+
+
+
+
 
   return (
     <div className={darkMode ? "otsuka-dark" : ""} style={{ background: 'var(--otsuka-bg-gradient)', minHeight: '100vh' }}>
       <button
-  className={`chatbot-toggler modern-toggler ${togglerAnimClass}`}
-  onClick={() => setIsOpen(!isOpen)}
-  aria-label="Toggle chatbot"
-  style={{
-    position: 'fixed',
-    right: '20px',
-    bottom: '20px',
-    zIndex: 10000,
-    background: 'transparent',
-    border: 'none',
-    padding: 0,
-    outline: 'none',
-    boxShadow: 'none',
-    borderRadius: 0,
-    minWidth: 0,
-    minHeight: 0,
-    transition: "transform 0.25s cubic-bezier(.41,1.2,.5,1), opacity 0.23s cubic-bezier(.47,1.8,.7,.95)"
-  }}
->
-  {isOpen ? (
-    <span style={{
-      fontSize: 44,
-      color: '#B01C2E',
-      fontWeight: 700,
-      lineHeight: 1,
-      background: 'transparent',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}>
-      ✖
-    </span>
-  ) : (
-    <img
-      src={ChatbotIcon}
-      alt="Chatbot"
-      className="chatbot-icon-animated"
-      style={{
-        height: 54,
-        width: 54,
-        display: 'block',
-        background: 'none',
-        border: 'none'
-      }}
-    />
-  )}
-</button>
-
+        className={`chatbot-toggler modern-toggler ${togglerAnimClass}`}
+        onClick={() => setIsOpen(!isOpen)}
+        aria-label="Toggle chatbot"
+        style={{
+          position: 'fixed',
+          right: '20px',
+          bottom: '20px',
+          zIndex: 10000,
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          outline: 'none',
+          boxShadow: 'none',
+          borderRadius: 0,
+          minWidth: 0,
+          minHeight: 0,
+          transition: "transform 0.25s cubic-bezier(.41,1.2,.5,1), opacity 0.23s cubic-bezier(.47,1.8,.7,.95)"
+        }}
+      >
+        {isOpen ? (
+          <span style={{
+            fontSize: 44,
+            color: '#B01C2E',
+            fontWeight: 700,
+            lineHeight: 1,
+            background: 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            ✖
+          </span>
+        ) : (
+          <img
+            src={ChatbotIcon}
+            alt="Chatbot"
+            className="chatbot-icon-animated"
+            style={{
+              height: 54,
+              width: 54,
+              display: 'block',
+              background: 'none',
+              border: 'none'
+            }}
+          />
+        )}
+      </button>
 
       {isOpen && (
         <div
@@ -417,9 +467,7 @@ const ChatBot = () => {
               </svg>
             </button>
           </div>
-          <footer
-            className="chatbot-footer"
-          >
+          <footer className="chatbot-footer">
             <button
               onClick={() => downloadSummaryDocx(messages)}
               title="Download chat transcript"
